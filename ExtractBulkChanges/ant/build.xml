@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+
+<project default="main" basedir=".">
+
+	<property file="build.properties" />
+	
+	<target name="main" depends="clean,compile,package">
+		<echo message="Base Dir: ${basedir}"/>		
+	</target>
+
+	<target name="clean">	
+		<delete dir="${target.dir}"/>
+		<mkdir dir="${target.dir}"/>
+	</target>
+
+	<target name="compile">
+		<echo message="Compiling " />
+		<javac sourcepath="" srcdir="${src.dir}" source="1.6" target="1.6" debug="true">
+			<classpath>
+				<fileset dir="${project.dir}/lib">
+					<include name="*.jar" />
+					<include name="**/*.jar" />
+				</fileset>
+				<dirset dir="${src.dir}">
+				</dirset>
+			</classpath>
+		</javac>
+	</target>
+	
+	<target name="package">
+		<jar destfile="${target.dir}/${project.name}.jar">
+			<fileset dir="${src.dir}" />
+		</jar>
+	</target>
+	
+</project>
