@@ -5,6 +5,10 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
@@ -135,7 +139,7 @@ public class ExtractBulkChanges implements IEventAction {
 			logger.info("Worksheet created.");
 			XSSFCellStyle dateCellStyle = wb.createCellStyle();
 			CreationHelper createHelper = wb.getCreationHelper();
-			dateCellStyle.setDataFormat(createHelper.createDataFormat().getFormat("m/d/yy"));
+			dateCellStyle.setDataFormat(createHelper.createDataFormat().getFormat("mm/dd/yyyy"));
 			
 			// Add headers to Worksheet
 			addRow(headers, ws, rowIdx);
@@ -188,12 +192,15 @@ public class ExtractBulkChanges implements IEventAction {
 				 		if (itemtypeBOM.equals(ExtractConstants.MBR_SUBCLASS)) {
 				 			data[2] = itemBOM.getName(); // MBR Item Number
 				 			logger.info("MBR Item Number: " + data[2]);
-				 			data[3] = (String)rowBOM.getValue(ItemConstants.ATT_BOM_ITEM_REV);	 // MBR Revision
-				 			logger.info("MBR Revision: " + data[3]);
+				 			data[3] = (String)rowBOM.getValue(ItemConstants.ATT_BOM_ITEM_REV);	 
+				 			
 				 			
 				 			// Get revision 
 				 			String [] revChange = data[3].trim().split(" +");
 				 			if (revChange.length > 0) {
+				 				data[3] = revChange[0]; // MBR Revision
+				 				logger.info("MBR Revision: " + data[3]);
+				 				
 				 				IChange ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_CHANGE_BASE_CLASS, revChange[1]);
 				 				if (ecoMBR.getAgileClass().equals(ExtractConstants.ECO_SUBCLASS)) {
 				 					ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_ECO, revChange[1]);
@@ -202,8 +209,12 @@ public class ExtractBulkChanges implements IEventAction {
 				 				// Get the ECO related to this revision
 				 				data[4] = ecoMBR.getName(); // MBR Rev-ECO Number
 				 				logger.info("MBR Rev-ECO Number: " + data[4]);
+				 				
+				 				/*
+				 				 * NOT THE DATE OF ECO RELEASED
 				 				data[5] = ecoMBR.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_RELEASED).toString();
 				 				logger.info("MBR ECO Date to ERP: " + data[5]); // MBR ECO Date to ERP
+				 				*/
 				 				
 				 				// Find the ATO that sent this change to the ERP
 				 				IQuery atoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_ATO);
@@ -218,6 +229,7 @@ public class ExtractBulkChanges implements IEventAction {
 				 				while(atoIter.hasNext()) {
 				 					IRow rowATO = (IRow)atoIter.next();
 				 					ITransferOrder ato = (ITransferOrder) rowATO.getReferent();
+				 					data[5] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_DATE_RELEASED).toString();
 				 					data[6] = ato.toString();
 				 					logger.info("ATO Number for MBR to ERP: " + data[6]); // ATO Number for MBR to ERP
 				 					break;
@@ -254,15 +266,23 @@ public class ExtractBulkChanges implements IEventAction {
 		// Iterate through all data in array
 		for (int i = 0; i < data.length; i++) {
 			XSSFCell cell = row.createCell(i);
+			cell.setCellValue(data[i]);
 			
 			// Is this a date value?
 			if (headers[i].equals("Bulk Creation Date") || 
-					headers[i].equals("MBR ECO Date to ERP"))
-			cell.setCellValue(data[i]);
-			cell.setCellStyle(dateCellStyle);
+					headers[i].equals("MBR ECO Date to ERP")) {
+				logger.info("Date parsing...");
+				cell.setCellStyle(dateCellStyle);
+				// Work the dates
+				Date myDate = tryParse(data[i]);
+				cell.setCellValue(myDate.toString());	
+				logger.info("Date:");
+				logger.info(myDate.getDay() + "/" + myDate.getMonth() + "/" + myDate.getYear());
+			}
 		}
 	}
 
+	// Use this to add a row into an Excel Worksheet
 	private void addRow(String[] data, XSSFSheet ws, int rowIdx) {
 		// Create row in Excel 
 		XSSFRow row = ws.createRow(rowIdx);
@@ -272,5 +292,25 @@ public class ExtractBulkChanges implements IEventAction {
 			row.createCell(i).setCellValue(data[i]);
 		}
 		
+	}
+	
+	// Use this to parse dates into a single format
+	private Date tryParse(String dateString)
+	{
+		String[] formatStrings = {"yyyy-MM-dd", "EEE MMM dd HH:mm:ss z yyyy"};
+	    for (String formatString : formatStrings)
+	    {
+	        try
+	        {
+	        	Date myDate = new SimpleDateFormat(formatString).parse(dateString);
+	        	logger.info(dateString + " formated using " + formatString);
+	            return myDate;
+	        }
+	        catch (ParseException e) {
+	        	// Do nothing...
+	        }
+	    }
+
+	    return null;
 	}
 }
