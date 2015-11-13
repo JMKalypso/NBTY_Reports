@@ -65,6 +65,12 @@ public class ExtractBulkChanges implements IEventAction {
 			// Query for Bulks
 			IQuery query = (IQuery) session.createObject(IQuery.OBJECT_TYPE, cls);
 			query.setCaseSensitive(false);
+			// Get dates for criteria
+			String fromDate = props.getProperty("fromDate");
+			String toDate = props.getProperty("toDate");
+			logger.info(fromDate);
+			logger.info(toDate);
+			query.setCriteria("[2002] between ('" + fromDate + "' , '" + toDate + "')");
 			
 			// Create the Excel file.
 			XSSFWorkbook wb = new XSSFWorkbook();
@@ -92,7 +98,7 @@ public class ExtractBulkChanges implements IEventAction {
 //			
 //			agileObject.send(users, "Comments");
 			 
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.STRING, "Test"));
+			return new EventActionResult(eventInfo, new ActionResult(ActionResult.STRING, "Success"));
 		} catch (APIException e) {
 			return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, e));
 		} catch (FileNotFoundException e) {
@@ -128,6 +134,7 @@ public class ExtractBulkChanges implements IEventAction {
 					"Bulk Oracle Item Number",
 					"Bulk Creation Date",
 					"MBR Item Number",
+					"MBR Creation Date", //3
 					"MBR Revision",
 					"MBR Rev-ECO Number",
 					"MBR ECO Date to ERP",
@@ -151,12 +158,16 @@ public class ExtractBulkChanges implements IEventAction {
 			// Build data 
 			String [] data = new String[headers.length];
 			ITwoWayIterator iter = results.getTableIterator();
+			int counter = 0;
+			
 			// Iterate results 
 			while(iter.hasNext()) {
 			 	IRow row = (IRow) iter.next();
 			 	
 			 	// Get all revisions
 			 	IItem item = (IItem)row.getReferent();
+			 	logger.info("Bulk number: " + item.getName());
+			 	
 			 	Map<?,?> revisions = item.getRevisions();
 			 	
 			 	Set<?> set = revisions.entrySet();
@@ -167,90 +178,95 @@ public class ExtractBulkChanges implements IEventAction {
 			 		Map.Entry<?,?> entry = (Map.Entry<?,?>)it.next();
 			 		String rev = (String)entry.getValue();
 			 		logger.info("Revision " + rev + " change: " + entry.getKey());
-			 		item.setRevision(rev);
 			 		
-			 		data[0] = item.getName(); 												// Bulk Oracle Item Number
-				 	data[1] = item.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); 	// Bulk Creation Date
-				 	logger.info("Bulk Oracle Item Number: " + data[0]); 
-				 	logger.info("Bulk Creation Date: " + data[1]);
-				 	
-				 	ITable bomTable = item.getTable(ItemConstants.TABLE_BOM);
-				 	logger.info("BOM size: " + bomTable.size());
-				 	
-				 	ITwoWayIterator itBOM = bomTable.getTableIterator();
-				 	
-				 	// Iterate the BOM of the Bulk, looking for the MBR
-				 	while(itBOM.hasNext()) {
-				 		IRow rowBOM = (IRow)itBOM.next();
-				 		IItem itemBOM = (IItem)rowBOM.getReferent();
+			 		// Only care for ECOs
+			 		if (rev.trim().length() <= 0 || rev.trim().length() > 2) {
+			 			//This is not a revision, ignore
+			 		} else {
+			 			// This is a revision
+			 			item.setRevision(rev);
 				 		
-				 		logger.info("BOM Item: " + itemBOM.getName());
-				 		String itemtypeBOM = (String)itemBOM.getAgileClass().getName();
-				 		logger.info("BOM Item Type: " + itemtypeBOM);
-				 		
-				 		// Is this the MBR?
-				 		if (itemtypeBOM.equals(ExtractConstants.MBR_SUBCLASS)) {
-				 			data[2] = itemBOM.getName(); // MBR Item Number
-				 			logger.info("MBR Item Number: " + data[2]);
-				 			data[3] = (String)rowBOM.getValue(ItemConstants.ATT_BOM_ITEM_REV);	 
-				 			
-				 			
-				 			// Get revision 
-				 			String [] revChange = data[3].trim().split(" +");
-				 			if (revChange.length > 0) {
-				 				data[3] = revChange[0]; // MBR Revision
-				 				logger.info("MBR Revision: " + data[3]);
-				 				
-				 				IChange ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_CHANGE_BASE_CLASS, revChange[1]);
-				 				if (ecoMBR.getAgileClass().equals(ExtractConstants.ECO_SUBCLASS)) {
-				 					ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_ECO, revChange[1]);
-				 				} 
-				 				
-				 				// Get the ECO related to this revision
-				 				data[4] = ecoMBR.getName(); // MBR Rev-ECO Number
-				 				logger.info("MBR Rev-ECO Number: " + data[4]);
-				 				
-				 				/*
-				 				 * NOT THE DATE OF ECO RELEASED
-				 				data[5] = ecoMBR.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_RELEASED).toString();
-				 				logger.info("MBR ECO Date to ERP: " + data[5]); // MBR ECO Date to ERP
-				 				*/
-				 				
-				 				// Find the ATO that sent this change to the ERP
-				 				IQuery atoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_ATO);
-				 				atoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
-				 				atoQuery.setRelatedContentClass(ChangeConstants.CLASS_ECO);
-				 				atoQuery.setCaseSensitive(false);
-				 				atoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[4]  + "' ");
-				 				
-				 				ITable resATO = atoQuery.execute();
-				 				ITwoWayIterator atoIter = resATO.getTableIterator();
-				 				
-				 				while(atoIter.hasNext()) {
-				 					IRow rowATO = (IRow)atoIter.next();
-				 					ITransferOrder ato = (ITransferOrder) rowATO.getReferent();
-				 					data[5] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_DATE_RELEASED).toString();
-				 					data[6] = ato.toString();
-				 					logger.info("ATO Number for MBR to ERP: " + data[6]); // ATO Number for MBR to ERP
-				 					break;
-				 				}
-				 			} // rev CLOSE
-				 			
-				 		} // THIS IS A MBR
-				 	} // BULK BOM
-				 	
-				 	
-				 	
-				 	
+				 		data[0] = item.getName(); 												// Bulk Oracle Item Number
+					 	data[1] = item.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); 	// Bulk Creation Date
+					 	logger.info("Bulk Oracle Item Number: " + data[0]); 
+					 	logger.info("Bulk Creation Date: " + data[1]);
+					 	
+					 	ITable bomTable = item.getTable(ItemConstants.TABLE_BOM);
+					 	logger.info("BOM size: " + bomTable.size());
+					 	
+					 	ITwoWayIterator itBOM = bomTable.getTableIterator();
+					 	
+					 	// Iterate the BOM of the Bulk, looking for the MBR
+					 	while(itBOM.hasNext()) {
+					 		IRow rowBOM = (IRow)itBOM.next();
+					 		IItem itemBOM = (IItem)rowBOM.getReferent();
+					 		
+					 		String itemtypeBOM = (String)itemBOM.getAgileClass().getName();
+					 		
+					 		// Is this the MBR?
+					 		if (itemtypeBOM.equals(ExtractConstants.MBR_SUBCLASS)) {
+					 			logger.info("BOM Item: " + itemBOM.getName());
+					 			logger.info("BOM Item Type: " + itemtypeBOM);
+					 			
+					 			data[2] = itemBOM.getName(); // MBR Item Number
+					 			data[4] = (String)rowBOM.getValue(ItemConstants.ATT_BOM_ITEM_REV);	 
+					 			
+					 			
+					 			// Get revision 
+					 			String [] revChange = data[3].trim().split(" +");
+					 			if (revChange.length > 0) {
+					 				data[4] = revChange[0]; // MBR Revision
+					 				
+					 				// Only care for ECOs
+							 		if (revChange[0].trim().length() <= 0 || revChange[0].trim().length() > 2) {
+							 			//This is not a revision, ignore
+							 		} else {
+							 			// This is a revision
+							 			logger.info("MBR Revision: " + data[4]);
+						 				
+						 				IChange ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_CHANGE_BASE_CLASS, revChange[1]);
+						 				if (ecoMBR.getAgileClass().equals(ExtractConstants.ECO_SUBCLASS)) {
+						 					ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_ECO, revChange[1]);
+						 				} 
+						 				
+						 				// Get the ECO related to this revision
+						 				data[5] = ecoMBR.getName(); // MBR Rev-ECO Number
+						 				logger.info("MBR Rev-ECO Number: " + data[5]);
+						 				
+						 				// Find the ATO that sent this change to the ERP
+						 				IQuery atoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_ATO);
+						 				atoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
+						 				atoQuery.setRelatedContentClass(ChangeConstants.CLASS_ECO);
+						 				atoQuery.setCaseSensitive(false);
+						 				atoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[5]  + "' ");
+						 				
+						 				ITable resATO = atoQuery.execute();
+						 				ITwoWayIterator atoIter = resATO.getTableIterator();
+						 				
+						 				while(atoIter.hasNext()) {
+						 					IRow rowATO = (IRow)atoIter.next();
+						 					ITransferOrder ato = (ITransferOrder) rowATO.getReferent();
+						 					data[6] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
+						 					data[7] = ato.toString(); // ATO Number for MBR to ERP
+						 					logger.info("ATO Number for MBR to ERP: " + data[7]); 
+						 					
+						 					// Add data to Worksheet
+						 					addRow(data, ws, rowIdx, dateCellStyle, headers);
+						 					rowIdx++;
+						 					data = new String[headers.length];
+						 					
+						 					
+						 					break;
+						 				}
+							 		}
+					 				
+					 			} // rev CLOSE
+					 			
+					 		} // THIS IS A MBR
+					 	} // BULK BOM
+			 		} // ECO Revision
 			 	} // EACH REVISION
 			 	
-			 	// Add data to Worksheet
-				addRow(data, ws, rowIdx, dateCellStyle, headers);
-				rowIdx++;
-				data = new String[headers.length];
-			 	
-			 	// temp break
-			 	break;
 			 }
 
 		} catch (Exception e1) {
@@ -260,26 +276,29 @@ public class ExtractBulkChanges implements IEventAction {
 
 	private void addRow(String[] data, XSSFSheet ws, int rowIdx,
 			XSSFCellStyle dateCellStyle, String[] headers) {
-		// Create row in Excel 
-		XSSFRow row = ws.createRow(rowIdx);
 
-		// Iterate through all data in array
-		for (int i = 0; i < data.length; i++) {
-			XSSFCell cell = row.createCell(i);
-			cell.setCellValue(data[i]);
-			
-			// Is this a date value?
-			if (headers[i].equals("Bulk Creation Date") || 
-					headers[i].equals("MBR ECO Date to ERP")) {
-				logger.info("Date parsing...");
-				cell.setCellStyle(dateCellStyle);
-				// Work the dates
-				Date myDate = tryParse(data[i]);
-				cell.setCellValue(myDate.toString());	
-				logger.info("Date:");
-				logger.info(myDate.getDay() + "/" + myDate.getMonth() + "/" + myDate.getYear());
+		try {
+			// Create row in Excel 
+			XSSFRow row = ws.createRow(rowIdx);
+
+			// Iterate through all data in array
+			for (int i = 0; i < data.length; i++) {
+				XSSFCell cell = row.createCell(i);
+				cell.setCellValue(data[i]);
+				
+				// Is this a date value?
+				if (headers[i].equals("Bulk Creation Date") || 
+						headers[i].equals("MBR ECO Date to ERP")) {
+					cell.setCellStyle(dateCellStyle);
+					// Work the dates
+					Date myDate = tryParse(data[i]);
+					cell.setCellValue(myDate.toString());	
+				}
 			}
+		} catch (Exception e) {
+			logger.info(e.getMessage());
 		}
+		
 	}
 
 	// Use this to add a row into an Excel Worksheet
@@ -310,7 +329,7 @@ public class ExtractBulkChanges implements IEventAction {
 	        	// Do nothing...
 	        }
 	    }
-
+	    logger.info("Parse format not found.");
 	    return null;
 	}
 }
