@@ -137,6 +137,7 @@ public class ExtractBulkChanges implements IEventAction {
 					"MBR Creation Date", //3
 					"MBR Revision",
 					"MBR Rev-ECO Number",
+					"MBR ECO Originated Date", // 6
 					"MBR ECO Date to ERP",
 					"ATO Number for MBR to ERP"
 			};
@@ -209,11 +210,13 @@ public class ExtractBulkChanges implements IEventAction {
 					 			logger.info("BOM Item Type: " + itemtypeBOM);
 					 			
 					 			data[2] = itemBOM.getName(); // MBR Item Number
+					 			data[3] = itemBOM.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); // MBR Creation Date
 					 			data[4] = (String)rowBOM.getValue(ItemConstants.ATT_BOM_ITEM_REV);	 
 					 			
+					 			logger.info("MBR Complete Revision: " + data[4]);
 					 			
 					 			// Get revision 
-					 			String [] revChange = data[3].trim().split(" +");
+					 			String [] revChange = data[4].trim().split(" +");
 					 			if (revChange.length > 0) {
 					 				data[4] = revChange[0]; // MBR Revision
 					 				
@@ -223,41 +226,45 @@ public class ExtractBulkChanges implements IEventAction {
 							 		} else {
 							 			// This is a revision
 							 			logger.info("MBR Revision: " + data[4]);
+							 			logger.info("MBR Revision Change: " + revChange[1]);
 						 				
 						 				IChange ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_CHANGE_BASE_CLASS, revChange[1]);
-						 				if (ecoMBR.getAgileClass().equals(ExtractConstants.ECO_SUBCLASS)) {
-						 					ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_ECO, revChange[1]);
+						 				logger.info(ecoMBR.getAgileClass().toString());
+						 				if (ecoMBR.getAgileClass().toString().equals(ExtractConstants.ECO_SUBCLASS)) {
+						 					//ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_ECO, revChange[1]);
+						 					logger.info("It is an ECO");
+						 					// Get the ECO related to this revision
+							 				data[5] = ecoMBR.getName(); // MBR Rev-ECO Number
+							 				logger.info("MBR Rev-ECO Number: " + data[5]);
+							 				data[6] = ecoMBR.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_ORIGINATED).toString();
+							 				logger.info("MBR ECO Originated Date: " + data[6]);
+							 				
+							 				// Find the ATO that sent this change to the ERP
+							 				IQuery atoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_ATO);
+							 				atoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
+							 				atoQuery.setRelatedContentClass(ChangeConstants.CLASS_ECO);
+							 				atoQuery.setCaseSensitive(false);
+							 				atoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[5]  + "' ");
+							 				
+							 				ITable resATO = atoQuery.execute();
+							 				ITwoWayIterator atoIter = resATO.getTableIterator();
+							 				
+							 				while(atoIter.hasNext()) {
+							 					IRow rowATO = (IRow)atoIter.next();
+							 					ITransferOrder ato = (ITransferOrder) rowATO.getReferent();
+							 					data[7] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
+							 					data[8] = ato.toString(); // ATO Number for MBR to ERP
+							 					logger.info("ATO Number for MBR to ERP: " + data[8]); 
+							 					
+							 					// Add data to Worksheet
+							 					addRow(data, ws, rowIdx, dateCellStyle, headers);
+							 					rowIdx++;
+							 					data = new String[headers.length];
+							 					
+							 					
+							 					break;
+							 				}
 						 				} 
-						 				
-						 				// Get the ECO related to this revision
-						 				data[5] = ecoMBR.getName(); // MBR Rev-ECO Number
-						 				logger.info("MBR Rev-ECO Number: " + data[5]);
-						 				
-						 				// Find the ATO that sent this change to the ERP
-						 				IQuery atoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_ATO);
-						 				atoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
-						 				atoQuery.setRelatedContentClass(ChangeConstants.CLASS_ECO);
-						 				atoQuery.setCaseSensitive(false);
-						 				atoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[5]  + "' ");
-						 				
-						 				ITable resATO = atoQuery.execute();
-						 				ITwoWayIterator atoIter = resATO.getTableIterator();
-						 				
-						 				while(atoIter.hasNext()) {
-						 					IRow rowATO = (IRow)atoIter.next();
-						 					ITransferOrder ato = (ITransferOrder) rowATO.getReferent();
-						 					data[6] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
-						 					data[7] = ato.toString(); // ATO Number for MBR to ERP
-						 					logger.info("ATO Number for MBR to ERP: " + data[7]); 
-						 					
-						 					// Add data to Worksheet
-						 					addRow(data, ws, rowIdx, dateCellStyle, headers);
-						 					rowIdx++;
-						 					data = new String[headers.length];
-						 					
-						 					
-						 					break;
-						 				}
 							 		}
 					 				
 					 			} // rev CLOSE
@@ -288,7 +295,9 @@ public class ExtractBulkChanges implements IEventAction {
 				
 				// Is this a date value?
 				if (headers[i].equals("Bulk Creation Date") || 
-						headers[i].equals("MBR ECO Date to ERP")) {
+						headers[i].equals("MBR ECO Date to ERP") || 
+						headers[i].equals("MBR Creation Date") ||
+						headers[i].equals("MBR ECO Creation Date")) {
 					cell.setCellStyle(dateCellStyle);
 					// Work the dates
 					Date myDate = tryParse(data[i]);
