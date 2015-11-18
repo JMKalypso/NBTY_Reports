@@ -5,6 +5,11 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
 <title>Select what report to generate</title>
+<link rel="stylesheet" href="pagestyle.css" media="screen, projection" />
+<link rel="stylesheet" href="slimpicker.css" media="screen, projection" />
+<script src="mootools-1.2.4-core-yc.js"></script>
+<script src="mootools-1.2.4.4-more-yc.js"></script>
+<script src="slimpicker.js"></script>
 </head>
 <body>
 	<form name="inputForm" action="URLPXServlet" method="POST">
@@ -23,13 +28,13 @@
 				<tr>
 					<td>From Date: (mm/dd/yyyy)</td>
 					<td>
-						<input type="text" name="fromDate" size="50"/>
+						<input id="fromDate" name="fromDate" type="text" class="slimpicker" autocomplete="off" value="" />
 					</td>
 				</tr>
 				<tr>
 					<td>To Date: (mm/dd/yyyy)</td>
 					<td>
-						<input type="text" name="toDate" size="50"/>
+						<input id="toDate" name="toDate" type="text" class="slimpicker" autocomplete="off" value="" />
 					</td>
 				</tr>
 			</tbody>
@@ -37,5 +42,12 @@
 		<input type="reset" value="Clear" name="clear" />
 		<input type="submit" value="Submit" name="submit" />
 	</form>
+	<script>
+	
+	$$('input.slimpicker').each( function(el){
+		var picker = new SlimPicker(el);
+	});
+	
+	</script>
 </body>
 </html>
