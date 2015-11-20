@@ -1,11 +1,9 @@
 package com.nbty.plm.px.extbulkchgs;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -23,10 +21,10 @@ import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import com.agile.api.APIException;
 import com.agile.api.ChangeConstants;
 import com.agile.api.IAdmin;
 import com.agile.api.IAgileClass;
+import com.agile.api.IAgileObject;
 import com.agile.api.IAgileSession;
 import com.agile.api.IChange;
 import com.agile.api.IItem;
@@ -52,24 +50,49 @@ public class ExtractBulkChanges implements IEventAction {
 	public EventActionResult doAction(IAgileSession session, INode node,
 			IEventInfo eventInfo) {
 		
-		OutputStream out = null;
 		try {
 			
 			// Load properties
 			Properties props = getProps();
 			logger.info("Properties loaded.");
 			
+			// Get report type from properties
+			String reportType = props.getProperty("reportType"); 
+			// Get dates for criteria
+			String fromDate = props.getProperty("fromDate");
+			String toDate = props.getProperty("toDate");
+						
+			if (reportType.equals("MBR Changes")) {
+				logger.info("MBR Changes selected. Creating Report...");
+				doMBRChangesReport(session, fromDate, toDate, props);
+			} else if (reportType.equals("CU-Bulk Report")) {
+				logger.info("CU-Bulk Report selected. Creating Report...");
+				doCUBulkReport(session, fromDate, toDate, props);
+			} else if (reportType.equals("CU Changes")) {
+				logger.info("CU Changes selected. Creating Report...");
+				doCUChangesReport(session, fromDate, toDate, props);
+			} else {
+				return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, new Exception("Not a valid report to generate.")));
+			}
+			
+			return new EventActionResult(eventInfo, new ActionResult(ActionResult.STRING, "Success"));
+		} catch (Exception e) {
+			return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, e));
+		} 
+		
+	}
+	
+	
+	private void doMBRChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+		
+		OutputStream out = null;
+		try {
 			IAdmin admin = session.getAdminInstance();
 			IAgileClass cls = admin.getAgileClass("Bulk");
 			
 			// Query for Bulks
 			IQuery query = (IQuery) session.createObject(IQuery.OBJECT_TYPE, cls);
 			query.setCaseSensitive(false);
-			// Get dates for criteria
-			String fromDate = props.getProperty("fromDate");
-			String toDate = props.getProperty("toDate");
-			logger.info(fromDate);
-			logger.info(toDate);
 			query.setCriteria("[2002] between ('" + fromDate + "' , '" + toDate + "')");
 			
 			// Create the Excel file.
@@ -78,33 +101,23 @@ public class ExtractBulkChanges implements IEventAction {
 			out = new FileOutputStream(outputFile);
 			logger.info("Excel file created: " + outputFile.getAbsolutePath().toString());
 			
+			
 			// Fill the file with data
-			doExport(query, "BulkChanges", session, wb);
+			buildMBRSheet(query, "BulkChanges", session, wb);
 			logger.info("Done exporting...");
 			
 			// Writing file 
 			wb.write(out);
 			logger.info("File written.");
 			
+			// Send report via email
 			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
-						props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), props.getProperty("outputFilename"),
-						props.getProperty("email.username"), props.getProperty("email.password"), props);
+					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), props.getProperty("outputFilename"),
+					props.getProperty("email.username"), props.getProperty("email.password"), props);
 			logger.info("Email sent.");
-//			IUser user1 = (IUser)session.getObject(UserConstants.CLASS_USER, "jlozano_kalypso");
-//			IUser[] users = new IUser[]{user1};
-//			
-//			List<IUser> col = Arrays.asList(users);
-//			IChange agileObject = (IChange)session.getObject(IChange.OBJECT_TYPE, "C000012752");
-//			
-//			agileObject.send(users, "Comments");
-			 
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.STRING, "Success"));
-		} catch (APIException e) {
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, e));
-		} catch (FileNotFoundException e) {
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, e));
+			
 		} catch (Exception e) {
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, e));
+			logger.info(e.getMessage());
 		} finally {
 			try {
 				if (out != null) {
@@ -112,9 +125,105 @@ public class ExtractBulkChanges implements IEventAction {
 				}
 			} catch (Exception e) {
 			}
+			
 		}
-	}//session.sendNotification(agileObject, "users - User Send", col, true, "Comments");//session.sendMail(users, "Hello");
+	}
 	
+	
+	private void doCUBulkReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+		
+		OutputStream out = null;
+		try {
+			IAdmin admin = session.getAdminInstance();
+			IAgileClass cls = admin.getAgileClass(ExtractConstants.BULK_SUBCLASS);
+			
+			// Query for Bulks
+			IQuery query = (IQuery) session.createObject(IQuery.OBJECT_TYPE, cls);
+			query.setCaseSensitive(false);
+			query.setCriteria("[2002] between ('" + fromDate + "' , '" + toDate + "')");
+			
+			// Create the Excel file.
+			XSSFWorkbook wb = new XSSFWorkbook();
+			File outputFile = new File(System.getProperty("java.io.tmpdir") + File.separator + UUID.randomUUID().toString() + ".xlsx");
+			out = new FileOutputStream(outputFile);
+			logger.info("Excel file created: " + outputFile.getAbsolutePath().toString());
+			
+			
+			// Fill the file with data
+			buildBulkCuSheet(query, "Bulk-CU relationship", session, wb);
+			logger.info("Done exporting...");
+			
+			// Writing file 
+			wb.write(out);
+			logger.info("File written.");
+			
+			// Send report via email
+			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
+					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), props.getProperty("outputFilename"),
+					props.getProperty("email.username"), props.getProperty("email.password"), props);
+			logger.info("Email sent.");
+			
+		} catch (Exception e) {
+			logger.info(e.getMessage());
+		} finally {
+			try {
+				if (out != null) {
+					out.close();
+				}
+			} catch (Exception e) {
+			}
+			
+		}
+	}
+	
+	private void doCUChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+		
+		OutputStream out = null;
+		try {
+			IAdmin admin = session.getAdminInstance();
+			IAgileClass cls = admin.getAgileClass(ExtractConstants.CU_SUBCLASS);
+			
+			// Query for Bulks
+			IQuery query = (IQuery) session.createObject(IQuery.OBJECT_TYPE, cls);
+			query.setCaseSensitive(false);
+			query.setCriteria("[2002] between ('" + fromDate + "' , '" + toDate + "')");
+			
+			// Create the Excel file.
+			XSSFWorkbook wb = new XSSFWorkbook();
+			File outputFile = new File(System.getProperty("java.io.tmpdir") + File.separator + UUID.randomUUID().toString() + ".xlsx");
+			out = new FileOutputStream(outputFile);
+			logger.info("Excel file created: " + outputFile.getAbsolutePath().toString());
+			
+			
+			// Fill the file with data
+			buildCUSheet(query, "Consumer Unit Changes", session, wb);
+			logger.info("Done exporting...");
+			
+			// Writing file 
+			wb.write(out);
+			logger.info("File written.");
+			
+			// Send report via email
+			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
+					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), props.getProperty("outputFilename"),
+					props.getProperty("email.username"), props.getProperty("email.password"), props);
+			logger.info("Email sent.");
+			
+		} catch (Exception e) {
+			logger.info(e.getMessage());
+		} finally {
+			try {
+				if (out != null) {
+					out.close();
+				}
+			} catch (Exception e) {
+			}
+			
+		}
+	}
+
+
+
 	private Properties getProps() throws Exception {
 		Properties props = new Properties();
 		InputStream propIn = ExtractBulkChanges.class.getResourceAsStream("/px/ExtractBulkChanges/ExtractBulkChanges.properties");
@@ -124,7 +233,7 @@ public class ExtractBulkChanges implements IEventAction {
 	}
 	
 	
-	public void doExport(IQuery query, String sheetName, IAgileSession session, XSSFWorkbook wb) throws Exception {
+	public void buildMBRSheet(IQuery query, String sheetName, IAgileSession session, XSSFWorkbook wb) throws Exception {
 		logger.info("Exporting...");
 		int rowIdx = 0;
 		try {
@@ -159,7 +268,6 @@ public class ExtractBulkChanges implements IEventAction {
 			// Build data 
 			String [] data = new String[headers.length];
 			ITwoWayIterator iter = results.getTableIterator();
-			int counter = 0;
 			
 			// Iterate results 
 			while(iter.hasNext()) {
@@ -281,6 +389,260 @@ public class ExtractBulkChanges implements IEventAction {
 		} 
 	}
 
+	public void buildBulkCuSheet(IQuery query, String sheetName, IAgileSession session, XSSFWorkbook wb) throws Exception {
+		logger.info("Exporting...");
+		int rowIdx = 0;
+		try {
+			
+			// Headers
+			String [] headers = new String[]{
+					"Bulk Oracle Item Number",
+					"Bulk Creation Date",
+					"Bulk Revision",
+					"CU Oracle Number",
+					"CU Revision"
+			};
+			
+			// Create Worksheet from Workbook
+			XSSFSheet ws = wb.createSheet(sheetName);
+			logger.info("Worksheet created.");
+			XSSFCellStyle dateCellStyle = wb.createCellStyle();
+			CreationHelper createHelper = wb.getCreationHelper();
+			dateCellStyle.setDataFormat(createHelper.createDataFormat().getFormat("mm/dd/yyyy"));
+			
+			// Add headers to Worksheet
+			addRow(headers, ws, rowIdx);
+			rowIdx++;
+			// Execute query for Bulks
+			ITable results = query.execute();
+			logger.info(results.size() + " bulks found.");
+			
+			// Build data 
+			String [] data = new String[headers.length];
+			ITwoWayIterator iter = results.getTableIterator();
+			
+			// Iterate results 
+			while(iter.hasNext()) {
+			 	IRow row = (IRow) iter.next();
+			 	
+			 	// Get all revisions
+			 	IItem item = (IItem)row.getReferent();
+			 	logger.info("Bulk number: " + item.getName());
+			 	
+			 	Map<?,?> revisions = item.getRevisions();
+			 	
+			 	Set<?> set = revisions.entrySet();
+			 	Iterator<?> it = set.iterator();
+			 	
+			 	// Iterate each revision
+			 	while (it.hasNext()) {
+			 		Map.Entry<?,?> entry = (Map.Entry<?,?>)it.next();
+			 		String rev = (String)entry.getValue();
+			 		logger.info("Revision " + rev + " change: " + entry.getKey());
+			 		
+			 		// Only care for ECOs
+			 		if (rev.trim().length() <= 0 || rev.trim().length() > 2) {
+			 			//This is not a revision, ignore
+			 		} else {
+			 			// This is a revision
+			 			item.setRevision(rev);
+				 		
+				 		data[0] = item.getName(); // Bulk Oracle Item Number
+					 	data[1] = item.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); 	// Bulk Creation Date
+					 	data[2] = item.getRevision(); // Bulk Revision
+					 	
+					 	logger.info("Bulk Oracle Item Number: " + data[0]); 
+					 	logger.info("Bulk Creation Date: " + data[1]);
+					 	logger.info("Bulk Revision: " + data[2]);
+					 	
+					 	ITable whereUsedTable = item.getTable(ItemConstants.TABLE_WHEREUSED);
+					 	logger.info("Where Used size: " + whereUsedTable.size());
+					 	
+					 	ITwoWayIterator itWhereUsed = whereUsedTable.getTableIterator();
+					 	
+					 	// Iterate the Where Used table of the Bulk, looking for the CU
+					 	while(itWhereUsed.hasNext()) {
+					 		IRow rowWU = (IRow)itWhereUsed.next();
+					 		IItem itemWU = (IItem)rowWU.getReferent();
+					 		
+					 		String itemtypeWU = (String)itemWU.getAgileClass().getName();
+					 		
+					 		// Is this the CU?
+					 		if (itemtypeWU.equals(ExtractConstants.CU_SUBCLASS)) {
+					 			logger.info("BOM Item: " + itemWU.getName());
+					 			logger.info("BOM Item Type: " + itemtypeWU);
+					 			
+					 			data[3] = itemWU.getName(); // CU Item Number
+					 			//data[3] = itemBOM.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); // MBR Creation Date
+					 			data[4] = (String)rowWU.getValue(ItemConstants.ATT_WHERE_USED_ITEM_REV); // CU Revision
+					 			
+					 			logger.info("CU Complete Revision: " + data[4]);
+					 			
+					 			// Add data to Worksheet
+			 					addRow(data, ws, rowIdx, dateCellStyle, headers);
+			 					rowIdx++;
+			 					
+					 			
+					 		} // THIS IS A CU
+					 	} // BULK WHEREUSED
+			 		} // ECO Revision
+			 	} // EACH REVISION
+			 	data = new String[headers.length];
+			 }
+
+		} catch (Exception e1) {
+			throw e1;
+		} 
+	}
+	
+	public void buildCUSheet(IQuery query, String sheetName, IAgileSession session, XSSFWorkbook wb) throws Exception {
+		logger.info("Exporting...");
+		int rowIdx = 0;
+		try {
+			
+			// Headers
+			String [] headers = new String[]{
+					"CU Oracle Item Number",
+					"CU Creation Date",
+					"CU Revision",
+					"CU Rev-ECO Number", // 3
+					"AS400 Integration Item",
+					"AS400 Integration Item Revision",
+					"AS400 Integration Item Rev-ECO",
+					"Bulk Item Number", // 7
+					"Bulk Revision",
+					"CTO Number" // 9
+			};
+			
+			// Create Worksheet from Workbook
+			XSSFSheet ws = wb.createSheet(sheetName);
+			logger.info("Worksheet created.");
+			XSSFCellStyle dateCellStyle = wb.createCellStyle();
+			CreationHelper createHelper = wb.getCreationHelper();
+			dateCellStyle.setDataFormat(createHelper.createDataFormat().getFormat("mm/dd/yyyy"));
+			
+			// Add headers to Worksheet
+			addRow(headers, ws, rowIdx);
+			rowIdx++;
+			// Execute query for Bulks
+			ITable results = query.execute();
+			logger.info(results.size() + " Consumer Units found.");
+			
+			// Build data 
+			String [] data = new String[headers.length];
+			ITwoWayIterator iter = results.getTableIterator();
+			
+			// Iterate results 
+			while(iter.hasNext()) {
+			 	IRow row = (IRow) iter.next();
+			 	
+			 	// Get the items
+			 	IItem item = (IItem)row.getReferent();
+			 	logger.info("CU number: " + item.getName());
+			 	IItem as400 = (IItem)session.getObject(IItem.OBJECT_TYPE, item.getName() + ".AS400");
+			 	logger.info("AS400 Item: " + as400);
+			 	
+			 	// If there is no AS400 Integration Item, then continue
+			 	if (as400 == null) continue;
+			 	
+			 	// Get all revisions
+			 	Map<?,?> revisions = item.getRevisions();
+			 	
+			 	Set<?> set = revisions.entrySet();
+			 	Iterator<?> it = set.iterator();
+			 	
+			 	// Iterate each revision
+			 	while (it.hasNext()) {
+			 		Map.Entry<?,?> entry = (Map.Entry<?,?>)it.next();
+			 		String rev = (String)entry.getValue();
+			 		logger.info("Revision " + rev + " change: " + entry.getKey());
+			 		
+			 		// Only care for ECOs
+			 		if (rev.trim().length() <= 0 || rev.trim().length() > 2) {
+			 			//This is not a revision, ignore
+			 		} else {
+			 			// This is a revision
+			 			// Set to this revision on both items
+			 			item.setRevision(rev);
+				 		as400.setRevision(rev);
+			 			
+				 		data[0] = item.getName(); // CU Oracle Item Number
+					 	data[1] = item.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); 	// CU Creation Date
+					 	
+					 	logger.info("CU Oracle Item Number: " + data[0]); 
+					 	logger.info("CU Creation Date: " + data[1]);
+					 	
+					 	data[2] = item.getRevision(); // CU Revision
+					 	data[3] = entry.getKey().toString(); // CU Revision Change
+					 	data[4] = as400.getName(); // AS400 Integration Item 
+					 	data[5] = as400.getRevision(); // AS400 Integration Item Revision
+					 	data[6] = as400.getChange().getName(); // AS400 Integration Item Revision Change 
+					 	
+					 	logger.info("CU Revision: " + data[2]);
+					 	logger.info("CU Revision Change: " + data[3]);
+					 	logger.info("AS400 Integration Item: " + data[4]);
+					 	logger.info("AS400 Integration Item Revision: " + data[5]);
+					 	logger.info("AS400 Item Change: " + data[6]);
+					 	
+					 	// Find the CTO that sent this change to the ERP
+		 				IQuery ctoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_CTO);
+		 				ctoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
+		 				ctoQuery.setRelatedContentClass(ChangeConstants.CLASS_CHANGE_BASE_CLASS);
+		 				ctoQuery.setCaseSensitive(false);
+		 				ctoQuery.setCriteria(" [Selected Content.Changes.Cover Page.Number] contains '" + data[6]  + "' ");
+		 				
+		 				ITable resCTO = ctoQuery.execute();
+		 				ITwoWayIterator ctoIter = resCTO.getTableIterator();
+		 				
+		 				while(ctoIter.hasNext()) {
+		 					IRow rowCTO = (IRow)ctoIter.next();
+		 					ITransferOrder cto = (ITransferOrder) rowCTO.getReferent();
+		 					//data[7] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
+		 					data[9] = cto.toString(); // ATO Number for MBR to ERP
+		 					logger.info("CTO Number for MBR to ERP: " + data[9]); 
+		 					
+		 					// Add data to Worksheet
+							addRow(data, ws, rowIdx, dateCellStyle, headers);
+							rowIdx++;
+		 				}
+					 	
+		 				// Get BOM to look for Bulk
+		 				ITable bomTable = item.getTable(ItemConstants.TABLE_BOM);
+					 	logger.info("BOM size: " + bomTable.size());
+					 	
+					 	ITwoWayIterator itBOM = bomTable.getTableIterator();
+		 				
+					 	// Iterate the BOM of the CU, looking for the Bulk
+					 	while(itBOM.hasNext()) {
+					 		IRow rowBOM = (IRow)itBOM.next();
+					 		IItem itemBOM = (IItem)rowBOM.getReferent();
+					 		
+					 		String itemtypeBOM = (String)itemBOM.getAgileClass().getName();
+					 		
+					 		// Is this the Bulk?
+					 		if (itemtypeBOM.equals(ExtractConstants.BULK_SUBCLASS)) {
+					 			logger.info("BOM Item Type: " + itemtypeBOM);
+					 			
+					 			data[7] = itemBOM.getName(); // Bulk Item Number 
+					 			data[8] = itemBOM.getRevision();
+					 			
+					 			logger.info("Bulk Number: " + data[7]);
+					 			logger.info("Bulk Revision: " + data[8]);
+					 			
+					 			break;
+					 		} 
+						 		
+					 	} // CU BOM
+			 		} // ECO Revision
+			 		data = new String[headers.length];
+			 	} // EACH REVISION
+			 }
+
+		} catch (Exception e1) {
+			throw e1;
+		} 
+	}
+	
 	private void addRow(String[] data, XSSFSheet ws, int rowIdx,
 			XSSFCellStyle dateCellStyle, String[] headers) {
 
@@ -294,14 +656,11 @@ public class ExtractBulkChanges implements IEventAction {
 				cell.setCellValue(data[i]);
 				
 				// Is this a date value?
-				if (headers[i].equals("Bulk Creation Date") || 
-						headers[i].equals("MBR ECO Date to ERP") || 
-						headers[i].equals("MBR Creation Date") ||
-						headers[i].equals("MBR ECO Creation Date")) {
+				if (headers[i].contains("Date")) {
 					cell.setCellStyle(dateCellStyle);
 					// Work the dates
 					Date myDate = tryParse(data[i]);
-					cell.setCellValue(myDate.toString());	
+					cell.setCellValue(myDate);	
 				}
 			}
 		} catch (Exception e) {
@@ -332,6 +691,8 @@ public class ExtractBulkChanges implements IEventAction {
 	        {
 	        	Date myDate = new SimpleDateFormat(formatString).parse(dateString);
 	        	logger.info(dateString + " formated using " + formatString);
+	        	SimpleDateFormat myDateFormat = new SimpleDateFormat("MM/dd/yyyy");
+	        	myDateFormat.format(myDate);
 	            return myDate;
 	        }
 	        catch (ParseException e) {
