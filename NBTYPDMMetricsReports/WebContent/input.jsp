@@ -28,13 +28,13 @@
 				<tr>
 					<td>From Date: (mm/dd/yyyy)</td>
 					<td>
-						<input id="fromDate" name="fromDate" type="text" class="slimpicker" autocomplete="off" value="" />
+						<input id="fromDate" name="fromDate" type="text" class="slimpicker" value="" />
 					</td>
 				</tr>
 				<tr>
 					<td>To Date: (mm/dd/yyyy)</td>
 					<td>
-						<input id="toDate" name="toDate" type="text" class="slimpicker" autocomplete="off" value="" />
+						<input id="toDate" name="toDate" type="text" class="slimpicker" value="" />
 					</td>
 				</tr>
 			</tbody>
