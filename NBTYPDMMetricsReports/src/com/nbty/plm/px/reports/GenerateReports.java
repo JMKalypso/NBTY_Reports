@@ -112,7 +112,7 @@ public class GenerateReports implements IEventAction {
 			} catch (Exception e) {
 			}
 		}
-	}//session.sendNotification(agileObject, "users - User Send", col, true, "Comments");//session.sendMail(users, "Hello");
+	}
 	
 	public String doAction(String reportType, String fromDate,
 			String toDate) {
@@ -538,20 +538,19 @@ public class GenerateReports implements IEventAction {
 					 			
 					 			data[3] = itemWU.getName(); // CU Item Number
 					 			//data[3] = itemBOM.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); // MBR Creation Date
-					 			data[4] = (String)rowWU.getValue(ItemConstants.ATT_BOM_ITEM_REV); // CU Revision
+					 			data[4] = (String)rowWU.getValue(ItemConstants.ATT_WHERE_USED_ITEM_REV); // CU Revision
 					 			
 					 			logger.info("CU Complete Revision: " + data[4]);
 					 			
 					 			// Add data to Worksheet
 			 					addRow(data, ws, rowIdx, dateCellStyle, headers);
 			 					rowIdx++;
-			 					data = new String[headers.length];
 					 			
 					 		} // THIS IS A CU
 					 	} // BULK WHEREUSED
 			 		} // ECO Revision
 			 	} // EACH REVISION
-			 	
+			 	data = new String[headers.length];
 			 }
 
 		} catch (Exception e1) {
@@ -570,9 +569,12 @@ public class GenerateReports implements IEventAction {
 					"CU Creation Date",
 					"CU Revision",
 					"CU Rev-ECO Number", // 3
-					"Bulk Item Number", 
+					"AS400 Integration Item",
+					"AS400 Integration Item Revision",
+					"AS400 Integration Item Rev-ECO",
+					"Bulk Item Number", // 7
 					"Bulk Revision",
-					"CTO Number" // 6
+					"CTO Number" // 9
 			};
 			
 			// Create Worksheet from Workbook
@@ -597,10 +599,11 @@ public class GenerateReports implements IEventAction {
 			while(iter.hasNext()) {
 			 	IRow row = (IRow) iter.next();
 			 	
-			 	// Get all revisions
+			 	// Get the items
 			 	IItem item = (IItem)row.getReferent();
 			 	logger.info("CU number: " + item.getName());
 			 	
+			 	// Get all revisions
 			 	Map<?,?> revisions = item.getRevisions();
 			 	
 			 	Set<?> set = revisions.entrySet();
@@ -608,6 +611,7 @@ public class GenerateReports implements IEventAction {
 			 	
 			 	// Iterate each revision
 			 	while (it.hasNext()) {
+			 		logger.info("Next revision...");
 			 		Map.Entry<?,?> entry = (Map.Entry<?,?>)it.next();
 			 		String rev = (String)entry.getValue();
 			 		logger.info("Revision " + rev + " change: " + entry.getKey());
@@ -616,78 +620,109 @@ public class GenerateReports implements IEventAction {
 			 		if (rev.trim().length() <= 0 || rev.trim().length() > 2) {
 			 			//This is not a revision, ignore
 			 		} else {
-			 			// This is a revision
-			 			item.setRevision(rev);
-				 		
-				 		data[0] = item.getName(); // CU Oracle Item Number
-					 	data[1] = item.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); 	// CU Creation Date
-					 	
-					 	logger.info("CU Oracle Item Number: " + data[0]); 
-					 	logger.info("CU Creation Date: " + data[1]);
-					 	
-					 	String revChg [] = item.getRevision().split(" +");
-					 	logger.info("CU Revision: " + revChg[0]);
-					 	logger.info("CU Revision Change: " + revChg[1]);
-					 	
-					 	data[2] = revChg[0]; // CU Revision
-					 	data[3] = revChg[1]; // CU Revision Change
-					 	
-					 	ITable bomTable = item.getTable(ItemConstants.TABLE_BOM);
-					 	logger.info("BOM size: " + bomTable.size());
-					 	
-					 	ITwoWayIterator itBOM = bomTable.getTableIterator();
-					 	
-					 	// Iterate the BOM of the CU, looking for the Bulk
-					 	while(itBOM.hasNext()) {
-					 		IRow rowBOM = (IRow)itBOM.next();
-					 		IItem itemBOM = (IItem)rowBOM.getReferent();
-					 		
-					 		String itemtypeBOM = (String)itemBOM.getAgileClass().getName();
-					 		
-					 		// Is this the Bulk?
-					 		if (itemtypeBOM.equals(ExtractConstants.BULK_SUBCLASS)) {
-					 			logger.info("BOM Item: " + itemBOM.getName());
-					 			logger.info("BOM Item Type: " + itemtypeBOM);
-					 			
-					 			data[4] = itemBOM.getName(); // Bulk Item Number 
-					 			
-					 			logger.info("Bulk Number: " + data[4]);
-					 			
-				 							 				
+			 			
+			 			IChange change = (IChange)session.getObject(IChange.OBJECT_TYPE, entry.getKey().toString());
+			 			logger.info("Change class: " + change.getAgileClass());
+			 			logger.info("Change: " + change.getName());
+			 			if (change.getAgileClass().getName().equals(ExtractConstants.ECO_SUBCLASS)){
+				 			// This is a revision
+				 			// Set to this revision on both items
+				 			item.setRevision(rev);
+				 			logger.info("Revision " + rev + " set in CU.");
+				 			
+				 			IItem as400 = (IItem)session.getObject(IItem.OBJECT_TYPE, item.getName() + ".AS400");
+						 	logger.info("AS400 Item: " + as400);
+						 	
+						 	// If there is no AS400 Integration Item, then continue
+						 	if (as400 == null) {
+						 		logger.info("AS400 Integration Item doesn't exist.");
+						 	}
+				 			
+				 			
+				 			try {
+				 				as400.setRevision(rev);
+				 				logger.info("Revision " + rev + " set in AS400 Item.");
+				 			} catch (APIException e) {
+				 				logger.info("AS400 Item doesn't have this revision. ");
+				 				as400 = null;
+				 			} catch(Exception e) {
+				 				logger.info(e.getMessage());
+				 			}
+				 			
+					 		data[0] = item.getName(); // CU Oracle Item Number
+						 	data[1] = item.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); 	// CU Creation Date
+						 	
+						 	logger.info("CU Oracle Item Number: " + data[0]); 
+						 	logger.info("CU Creation Date: " + data[1]);
+						 	
+						 	data[2] = item.getRevision(); // CU Revision
+						 	data[3] = entry.getKey().toString(); // CU Revision Change
+						 	data[4] = as400 == null ? "" : as400.getName(); // AS400 Integration Item 
+						 	data[5] = as400 == null ? "" : as400.getRevision(); // AS400 Integration Item Revision
+						 	data[6] = as400 == null ? "" : as400.getChange().getName(); // AS400 Integration Item Revision Change 
+						 	
+						 	logger.info("CU Revision: " + data[2]);
+						 	logger.info("CU Revision Change: " + data[3]);
+						 	logger.info("AS400 Integration Item: " + data[4]);
+						 	logger.info("AS400 Integration Item Revision: " + data[5]);
+						 	logger.info("AS400 Item Change: " + data[6]);
+						 	
+						 	if (as400 != null) {
+							 	// Find the CTO that sent this change to the ERP
+				 				IQuery ctoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_CTO);
+				 				ctoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
+				 				ctoQuery.setRelatedContentClass(ChangeConstants.CLASS_CHANGE_BASE_CLASS);
+				 				ctoQuery.setCaseSensitive(false);
+				 				ctoQuery.setCriteria(" [Selected Content.Changes.Cover Page.Number] contains '" + data[6]  + "' ");
 				 				
-					 		} 
+				 				ITable resCTO = ctoQuery.execute();
+				 				ITwoWayIterator ctoIter = resCTO.getTableIterator();
+				 				
+				 				while(ctoIter.hasNext()) {
+				 					IRow rowCTO = (IRow)ctoIter.next();
+				 					ITransferOrder cto = (ITransferOrder) rowCTO.getReferent();
+				 					//data[7] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
+				 					data[9] = cto.toString(); // ATO Number for MBR to ERP
+				 					logger.info("CTO Number for MBR to ERP: " + data[9]); 
+				 				}
+
+						 	}
+						 	
+			 				// Get BOM to look for Bulk
+			 				ITable bomTable = item.getTable(ItemConstants.TABLE_BOM);
+						 	logger.info("BOM size: " + bomTable.size());
+						 	
+						 	ITwoWayIterator itBOM = bomTable.getTableIterator();
+			 				
+						 	// Iterate the BOM of the CU, looking for the Bulk
+						 	while(itBOM.hasNext()) {
+						 		IRow rowBOM = (IRow)itBOM.next();
+						 		IItem itemBOM = (IItem)rowBOM.getReferent();
 						 		
-					 	} // CU BOM
-					 	
-					 	// Find the CTO that sent this change to the ERP
-		 				IQuery ctoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_CTO);
-		 				ctoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
-		 				ctoQuery.setRelatedContentClass(ChangeConstants.CLASS_ECO);
-		 				ctoQuery.setCaseSensitive(false);
-		 				ctoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[3]  + "' ");
-		 				
-		 				ITable resCTO = ctoQuery.execute();
-		 				ITwoWayIterator ctoIter = resCTO.getTableIterator();
-		 				
-		 				while(ctoIter.hasNext()) {
-		 					IRow rowCTO = (IRow)ctoIter.next();
-		 					ITransferOrder cto = (ITransferOrder) rowCTO.getReferent();
-		 					//data[7] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
-		 					data[5] = cto.toString(); // ATO Number for MBR to ERP
-		 					logger.info("CTO Number for MBR to ERP: " + data[5]); 
-		 					
-		 					// Add data to Worksheet
-		 					addRow(data, ws, rowIdx, dateCellStyle, headers);
-		 					rowIdx++;
-		 					data = new String[headers.length];
-		 					
-		 					
-		 					break;
-		 				}
-					 	
+						 		String itemtypeBOM = (String)itemBOM.getAgileClass().getName();
+						 		
+						 		// Is this the Bulk?
+						 		if (itemtypeBOM.equals(ExtractConstants.BULK_SUBCLASS)) {
+						 			logger.info("BOM Item Type: " + itemtypeBOM);
+						 			
+						 			data[7] = itemBOM.getName(); // Bulk Item Number 
+						 			data[8] = itemBOM.getRevision();
+						 			
+						 			logger.info("Bulk Number: " + data[7]);
+						 			logger.info("Bulk Revision: " + data[8]);
+						 			
+						 			break;
+						 		} 
+							 		
+						 	} // CU BOM
+						 	// Add data to Worksheet
+							addRow(data, ws, rowIdx, dateCellStyle, headers);
+							rowIdx++;
+			 			}
+
 			 		} // ECO Revision
+			 		data = new String[headers.length];
 			 	} // EACH REVISION
-			 	
 			 }
 
 		} catch (Exception e1) {
@@ -708,14 +743,11 @@ public class GenerateReports implements IEventAction {
 				cell.setCellValue(data[i]);
 				
 				// Is this a date value?
-				if (headers[i].equals("Bulk Creation Date") || 
-						headers[i].equals("MBR ECO Date to ERP") || 
-						headers[i].equals("MBR Creation Date") ||
-						headers[i].equals("MBR ECO Creation Date")) {
+				if (headers[i].contains("Date")) {
 					cell.setCellStyle(dateCellStyle);
 					// Work the dates
 					Date myDate = tryParse(data[i]);
-					cell.setCellValue(myDate.toString());	
+					cell.setCellValue(myDate);	
 				}
 			}
 		} catch (Exception e) {
@@ -746,6 +778,8 @@ public class GenerateReports implements IEventAction {
 	        {
 	        	Date myDate = new SimpleDateFormat(formatString).parse(dateString);
 	        	logger.info(dateString + " formated using " + formatString);
+	        	SimpleDateFormat myDateFormat = new SimpleDateFormat("MM/dd/yyyy");
+	        	myDateFormat.format(myDate);
 	            return myDate;
 	        }
 	        catch (ParseException e) {
