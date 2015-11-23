@@ -44,9 +44,9 @@ public class URLPXServlet extends HttpServlet {
 		response.getWriter().append("Sending...");
 		
 		GenerateReports generator = new GenerateReports(); 
-		generator.doAction(reportType, fromDate, toDate);
+		String result = generator.doAction(reportType, fromDate, toDate);
 		
-		response.getWriter().append("Email Sent.");
+		response.getWriter().append(result);
 		
 		//doGet(request, response);
 	}
