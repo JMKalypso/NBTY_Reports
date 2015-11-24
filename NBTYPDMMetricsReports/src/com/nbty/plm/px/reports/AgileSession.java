@@ -12,7 +12,7 @@ public class AgileSession {
 	public IAgileSession getSession() throws APIException {
 		IAgileSession session = null;
 		Map<Integer, String> params = new HashMap<Integer, String>();
-		params.put(AgileSessionFactory.URL, "https://agiledev.nbty.net/Agile");
+		params.put(AgileSessionFactory.URL, "http://172.18.24.39:40701/Agile");
 		params.put(AgileSessionFactory.USERNAME, "administrator");
 		params.put(AgileSessionFactory.PASSWORD, "agile9");
 		session = AgileSessionFactory.createSessionEx(params);

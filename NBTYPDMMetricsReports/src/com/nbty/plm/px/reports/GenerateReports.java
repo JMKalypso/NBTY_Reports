@@ -117,7 +117,7 @@ public class GenerateReports implements IEventAction {
 	public String doAction(String reportType, String fromDate,
 			String toDate) {
 		
-		
+		String result = "";
 		try {
 			
 			// Get Agile session
@@ -126,28 +126,30 @@ public class GenerateReports implements IEventAction {
 			
 			// Load properties
 			Properties props = getProps();
-			logger.info("Properties loaded.");
+			logger.info("Properties loaded.");		
 			
-			switch (reportType) {
-			case "MBR Changes": 
+			if (reportType.equals("MBR Changes")) {
 				logger.info("MBR Changes selected. Creating Report...");
-				doMBRChangesReport(session, fromDate, toDate, props);
-			case "CU-Bulk Report":
+				result = doMBRChangesReport(session, fromDate, toDate, props);
+			} else if (reportType.equals("CU-Bulk Report")) {
 				logger.info("CU-Bulk Report selected. Creating Report...");
-				doCUBulkReport(session, fromDate, toDate, props);
-			case "CU Changes":
+				result = doCUBulkReport(session, fromDate, toDate, props);
+			} else if (reportType.equals("CU Changes")) {
 				logger.info("CU Changes selected. Creating Report...");
-				doCUChangesReport(session, fromDate, toDate, props);
-			default: logger.info("Not a valid option.");
-			}			
+				result = doCUChangesReport(session, fromDate, toDate, props);
+			} else {
+				return result = "Not a valid report to generate.";
+			}
 			
-			return "Report sent.";
+			return result;
+		} catch (APIException e) {
+			return "doAction:APIException:" + e.getRootCause();
 		} catch (Exception e) {
-			return e.getMessage();
-		} 
+			return "doAction:Exception" + e.getMessage();
+		}
 	}
 	
-	private void doMBRChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private String doMBRChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
 		
 		OutputStream out = null;
 		try {
@@ -176,12 +178,12 @@ public class GenerateReports implements IEventAction {
 			
 			// Send report via email
 			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
-					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), props.getProperty("outputFilename"),
+					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "MBRChangesReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
-			logger.info("Email sent.");
+			return "Email sent.";
 			
 		} catch (Exception e) {
-			logger.info(e.getMessage());
+			return "doMBRChangesReport: " + e.getMessage();
 		} finally {
 			try {
 				if (out != null) {
@@ -194,7 +196,7 @@ public class GenerateReports implements IEventAction {
 	}
 	
 	
-	private void doCUBulkReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private String doCUBulkReport(IAgileSession session, String fromDate, String toDate, Properties props) {
 		
 		OutputStream out = null;
 		try {
@@ -223,12 +225,12 @@ public class GenerateReports implements IEventAction {
 			
 			// Send report via email
 			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
-					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), props.getProperty("outputFilename"),
+					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "CuBulkRelationshipReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
-			logger.info("Email sent.");
+			return "Email sent.";
 			
 		} catch (Exception e) {
-			logger.info(e.getMessage());
+			return "doCUBulkReport: " + e.getMessage();
 		} finally {
 			try {
 				if (out != null) {
@@ -240,7 +242,7 @@ public class GenerateReports implements IEventAction {
 		}
 	}
 	
-	private void doCUChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private String doCUChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
 		
 		OutputStream out = null;
 		try {
@@ -269,12 +271,12 @@ public class GenerateReports implements IEventAction {
 			
 			// Send report via email
 			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
-					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), props.getProperty("outputFilename"),
+					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "CUChangesReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
-			logger.info("Email sent.");
+			return "Email sent.";
 			
 		} catch (Exception e) {
-			logger.info(e.getMessage());
+			return "doCUChangesReport: " + e.getMessage();
 		} finally {
 			try {
 				if (out != null) {
@@ -569,12 +571,14 @@ public class GenerateReports implements IEventAction {
 					"CU Creation Date",
 					"CU Revision",
 					"CU Rev-ECO Number", // 3
+					"CU Rev-ECO Date Originated",
 					"AS400 Integration Item",
 					"AS400 Integration Item Revision",
 					"AS400 Integration Item Rev-ECO",
-					"Bulk Item Number", // 7
+					"Bulk Item Number", // 8
 					"Bulk Revision",
-					"CTO Number" // 9
+					"CTO Number", // 10
+					"CTO Sent to AS400 Date"
 			};
 			
 			// Create Worksheet from Workbook
@@ -657,15 +661,20 @@ public class GenerateReports implements IEventAction {
 						 	
 						 	data[2] = item.getRevision(); // CU Revision
 						 	data[3] = entry.getKey().toString(); // CU Revision Change
-						 	data[4] = as400 == null ? "" : as400.getName(); // AS400 Integration Item 
-						 	data[5] = as400 == null ? "" : as400.getRevision(); // AS400 Integration Item Revision
-						 	data[6] = as400 == null ? "" : as400.getChange().getName(); // AS400 Integration Item Revision Change 
+						 	
+						 	IChange revECO = item.getChange();
+						 	data[4] = revECO.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_ORIGINATED).toString(); // CU Rev-ECO Date Originated
+						 	
+						 	data[5] = as400 == null ? "" : as400.getName(); // AS400 Integration Item 
+						 	data[6] = as400 == null ? "" : as400.getRevision(); // AS400 Integration Item Revision
+						 	data[7] = as400 == null ? "" : as400.getChange().getName(); // AS400 Integration Item Revision Change 
 						 	
 						 	logger.info("CU Revision: " + data[2]);
 						 	logger.info("CU Revision Change: " + data[3]);
-						 	logger.info("AS400 Integration Item: " + data[4]);
-						 	logger.info("AS400 Integration Item Revision: " + data[5]);
-						 	logger.info("AS400 Item Change: " + data[6]);
+						 	logger.info("ECO Rev-Change Date Originated: " + data[4]);
+						 	logger.info("AS400 Integration Item: " + data[5]);
+						 	logger.info("AS400 Integration Item Revision: " + data[6]);
+						 	logger.info("AS400 Item Change: " + data[7]);
 						 	
 						 	if (as400 != null) {
 							 	// Find the CTO that sent this change to the ERP
@@ -673,17 +682,21 @@ public class GenerateReports implements IEventAction {
 				 				ctoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
 				 				ctoQuery.setRelatedContentClass(ChangeConstants.CLASS_CHANGE_BASE_CLASS);
 				 				ctoQuery.setCaseSensitive(false);
-				 				ctoQuery.setCriteria(" [Selected Content.Changes.Cover Page.Number] contains '" + data[6]  + "' ");
+				 				ctoQuery.setCriteria(" [Selected Content.Changes.Cover Page.Number] contains '" + data[7]  + "' ");
 				 				
 				 				ITable resCTO = ctoQuery.execute();
 				 				ITwoWayIterator ctoIter = resCTO.getTableIterator();
+				 				logger.info(resCTO.size() + " Transfer Orders found. ");
 				 				
 				 				while(ctoIter.hasNext()) {
 				 					IRow rowCTO = (IRow)ctoIter.next();
 				 					ITransferOrder cto = (ITransferOrder) rowCTO.getReferent();
-				 					//data[7] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
-				 					data[9] = cto.toString(); // ATO Number for MBR to ERP
-				 					logger.info("CTO Number for MBR to ERP: " + data[9]); 
+				 					
+				 					data[10] = cto.toString(); // ATO Number for MBR to ERP
+				 					data[11] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE) != null ? 
+				 							cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString() : ""; // CTO Sent to AS400 Date
+				 					logger.info("CTO Number for MBR to ERP: " + data[10]);
+				 					logger.info("CTO Complete: " + data[11]); 
 				 				}
 
 						 	}
@@ -705,11 +718,11 @@ public class GenerateReports implements IEventAction {
 						 		if (itemtypeBOM.equals(ExtractConstants.BULK_SUBCLASS)) {
 						 			logger.info("BOM Item Type: " + itemtypeBOM);
 						 			
-						 			data[7] = itemBOM.getName(); // Bulk Item Number 
-						 			data[8] = itemBOM.getRevision();
+						 			data[8] = itemBOM.getName(); // Bulk Item Number 
+						 			data[9] = itemBOM.getRevision();
 						 			
-						 			logger.info("Bulk Number: " + data[7]);
-						 			logger.info("Bulk Revision: " + data[8]);
+						 			logger.info("Bulk Number: " + data[8]);
+						 			logger.info("Bulk Revision: " + data[9]);
 						 			
 						 			break;
 						 		} 
