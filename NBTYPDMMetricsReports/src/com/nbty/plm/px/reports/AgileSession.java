@@ -3,6 +3,9 @@ package com.nbty.plm.px.reports;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+
 import com.agile.api.APIException;
 import com.agile.api.AgileSessionFactory;
 import com.agile.api.IAgileSession;
@@ -29,10 +32,30 @@ public class AgileSession {
 		return session;
 	}
 
-	public static void main(String args[]) throws Exception {
-		System.out.printf("%f%n", (float)24/(1000*1000));
-//		IAgileSession session = new AgileSession().getSession("http://agilenbtytest.oracleoutsourcing.com/Agile", "administrator", "agile9");
-//		System.out.println("Session established as: " + session.getCurrentUser().getName());
-	}
+	public IAgileSession getSession(HttpServletRequest request, String URL) throws APIException { 
+		IAgileSession session = null;
+		AgileSessionFactory factory = AgileSessionFactory.getInstance(URL);
+		HashMap<Object,Object> params = new HashMap<Object,Object>(); 
+		params.put(AgileSessionFactory.PX_REQUEST, request); 
+		session = factory.createSession(params); 
+		return session; 
+	} 
+	
+	public IAgileSession getSession(Cookie[] cookies, String URL) throws Exception {
+		IAgileSession session = null; 
+		AgileSessionFactory factory = AgileSessionFactory.getInstance(URL); 
+		Map<Integer, String> params = new HashMap<Integer, String>();
+		String username = null; 
+		String pwd = null; 
+		for (int i = 0; i < cookies.length; i++) { 
+			if (cookies[i].getName().equals("j_username")) username = cookies[i].getValue(); 
+			else if (cookies[i].getName().equals("j_password")) pwd = cookies[i].getValue(); 
+		} 
+		params.put(AgileSessionFactory.PX_USERNAME, username); 
+		params.put(AgileSessionFactory.PX_PASSWORD, pwd);
+		
+		session = factory.createSession(params); 
+		return session; 
+	} 
 	
 }

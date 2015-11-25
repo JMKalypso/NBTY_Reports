@@ -1,8 +1,8 @@
 package com.nbty.plm.px.reports;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.ParseException;
@@ -13,6 +13,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import org.apache.log4j.Logger;
 import org.apache.poi.ss.usermodel.CreationHelper;
@@ -29,7 +32,6 @@ import com.agile.api.IAgileClass;
 import com.agile.api.IAgileSession;
 import com.agile.api.IChange;
 import com.agile.api.IItem;
-import com.agile.api.INode;
 import com.agile.api.IQuery;
 import com.agile.api.IRow;
 import com.agile.api.ITable;
@@ -38,95 +40,25 @@ import com.agile.api.ITwoWayIterator;
 import com.agile.api.ItemConstants;
 import com.agile.api.QueryConstants;
 import com.agile.api.TransferOrderConstants;
-import com.agile.px.ActionResult;
-import com.agile.px.EventActionResult;
-import com.agile.px.IEventAction;
-import com.agile.px.IEventInfo;
 
-public class GenerateReports implements IEventAction {
+public class GenerateReports {
 	
 	private static final Logger logger = Logger.getLogger("ExtractBulkChangesPXLog");
-
-	@Override
-	public EventActionResult doAction(IAgileSession session, INode node,
-			IEventInfo eventInfo) {
-		
-		OutputStream out = null;
-		try {
-			
-			// Load properties
-			Properties props = getProps();
-			logger.info("Properties loaded.");
-			
-			IAdmin admin = session.getAdminInstance();
-			IAgileClass cls = admin.getAgileClass("Bulk");
-			
-			// Query for Bulks
-			IQuery query = (IQuery) session.createObject(IQuery.OBJECT_TYPE, cls);
-			query.setCaseSensitive(false);
-			// Get dates for criteria
-			String fromDate = props.getProperty("fromDate");
-			String toDate = props.getProperty("toDate");
-			logger.info(fromDate);
-			logger.info(toDate);
-			query.setCriteria("[2002] between ('" + fromDate + "' , '" + toDate + "')");
-			
-			// Create the Excel file.
-			XSSFWorkbook wb = new XSSFWorkbook();
-			File outputFile = new File(System.getProperty("java.io.tmpdir") + File.separator + UUID.randomUUID().toString() + ".xlsx");
-			out = new FileOutputStream(outputFile);
-			logger.info("Excel file created: " + outputFile.getAbsolutePath().toString());
-			
-			// Fill the file with data
-			buildMBRSheet(query, "BulkChanges", session, wb);
-			logger.info("Done exporting...");
-			
-			// Writing file 
-			wb.write(out);
-			logger.info("File written.");
-			
-			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
-						props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), props.getProperty("outputFilename"),
-						props.getProperty("email.username"), props.getProperty("email.password"), props);
-			logger.info("Email sent.");
-//			IUser user1 = (IUser)session.getObject(UserConstants.CLASS_USER, "jlozano_kalypso");
-//			IUser[] users = new IUser[]{user1};
-//			
-//			List<IUser> col = Arrays.asList(users);
-//			IChange agileObject = (IChange)session.getObject(IChange.OBJECT_TYPE, "C000012752");
-//			
-//			agileObject.send(users, "Comments");
-			 
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.STRING, "Success"));
-		} catch (APIException e) {
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, e));
-		} catch (FileNotFoundException e) {
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, e));
-		} catch (Exception e) {
-			return new EventActionResult(eventInfo, new ActionResult(ActionResult.EXCEPTION, e));
-		} finally {
-			try {
-				if (out != null) {
-					out.close();
-				}
-			} catch (Exception e) {
-			}
-		}
-	}
 	
 	public String doAction(String reportType, String fromDate,
-			String toDate) {
+			String toDate, HttpServletRequest request, HttpServletResponse response) {
 		
 		String result = "";
 		try {
 			
-			// Get Agile session
-			IAgileSession session = new AgileSession().getSession();
-			logger.info("Session started.");
-			
 			// Load properties
 			Properties props = getProps();
-			logger.info("Properties loaded.");		
+			logger.info("Properties loaded.");	
+			
+			// Get Agile session
+			IAgileSession session = new AgileSession().getSession(request, 
+					props.getProperty(ExtractConstants.URL_PROPERTY));
+			logger.info("Session started.");	
 			
 			if (reportType.equals("MBR Changes")) {
 				logger.info("MBR Changes selected. Creating Report...");
@@ -143,6 +75,12 @@ public class GenerateReports implements IEventAction {
 			
 			return result;
 		} catch (APIException e) {
+			try {
+				e.printStackTrace(response.getWriter());
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
 			return "doAction:APIException:" + e.getRootCause();
 		} catch (Exception e) {
 			return "doAction:Exception" + e.getMessage();
