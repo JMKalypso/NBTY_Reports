@@ -10,6 +10,8 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.commons.validator.routines.EmailValidator;
+
 import com.nbty.plm.px.reports.GenerateReports;
 
 /**
@@ -43,29 +45,43 @@ public class URLPXServlet extends HttpServlet {
 		String reportType = request.getParameter("reports");
 		String fromDate = request.getParameter("fromDate");
 		String toDate = request.getParameter("toDate");
-		response.setContentType("text/html");
+		String email = request.getParameter("email");
 		
+		/*
+		 * Server not configured to enable the use of cookies
+		 */
 		// Get the cookies
-		Cookie[] cookies = request.getCookies();
-		printCookies(cookies,response);
-		
-		//response.getWriter().append("Sending...");
-		
-		GenerateReports generator = new GenerateReports(); 
-		String result = generator.doAction(reportType, fromDate, toDate, request, response);
-		
-		response.getWriter().append(result);
-		
-		//doGet(request, response);
+		//Cookie[] cookies = request.getCookies();
+		//printCookies(cookies,response);
+		if (validateEmail(email)) {
+			response.getWriter().append("Sending...");
+			GenerateReports generator = new GenerateReports(); 
+			generator.doAction(reportType, fromDate, toDate, request, response, email);
+		} else {
+			request.setAttribute("errorMessage", "Not a valid e-mail address.");
+			request.setAttribute("fromDate", fromDate);
+			request.setAttribute("toDate", toDate);
+			request.setAttribute("email", email);
+			
+			request.getRequestDispatcher("input.jsp").forward(request, response);
+			//response.sendRedirect("input.jsp");
+			//response.getWriter().append("Not a valid e-mail address.");
+		}
 	}
-
+	
+	@SuppressWarnings("unused")
 	private void printCookies(Cookie[] cookies, HttpServletResponse response) throws IOException {
+		response.setContentType("text/html");
 		PrintWriter writer = response.getWriter();
 		writer.append("<html><body>");
 		for (int i=0;i<cookies.length;i++) {
 			response.getWriter().append(cookies[i].getName() + ":" + cookies[i].getValue() + "<br>");
 		}
 		writer.append("</body></html>");
+	}
+	
+	private boolean validateEmail(String adress) {
+		return EmailValidator.getInstance().isValid(adress);
 	}
 
 }

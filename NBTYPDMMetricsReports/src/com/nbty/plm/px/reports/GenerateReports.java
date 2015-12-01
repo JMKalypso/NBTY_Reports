@@ -45,49 +45,52 @@ public class GenerateReports {
 	
 	private static final Logger logger = Logger.getLogger("ExtractBulkChangesPXLog");
 	
-	public String doAction(String reportType, String fromDate,
-			String toDate, HttpServletRequest request, HttpServletResponse response) {
+	public void doAction(String reportType, String fromDate,
+			String toDate, HttpServletRequest request, HttpServletResponse response, String email) {
 		
-		String result = "";
 		try {
 			
 			// Load properties
 			Properties props = getProps();
 			logger.info("Properties loaded.");	
 			
+			
+			
 			// Get Agile session
-			IAgileSession session = new AgileSession().getSession(request, 
-					props.getProperty(ExtractConstants.URL_PROPERTY));
+			IAgileSession session = new AgileSession().getSession(
+					props.getProperty(ExtractConstants.URL_PROPERTY),
+					ExtractConstants.PXUSER, ExtractConstants.PXPASS);
 			logger.info("Session started.");	
 			
-			if (reportType.equals("MBR Changes")) {
+			if (reportType.equals(ExtractConstants.MBR_TYPE)) {
 				logger.info("MBR Changes selected. Creating Report...");
-				result = doMBRChangesReport(session, fromDate, toDate, props);
-			} else if (reportType.equals("CU-Bulk Report")) {
+				doMBRChangesReport(session, fromDate, toDate, props);
+			} else if (reportType.equals(ExtractConstants.CUBULK_TYPE)) {
 				logger.info("CU-Bulk Report selected. Creating Report...");
-				result = doCUBulkReport(session, fromDate, toDate, props);
-			} else if (reportType.equals("CU Changes")) {
+				doCUBulkReport(session, fromDate, toDate, props);
+			} else if (reportType.equals(ExtractConstants.CU_TYPE)) {
 				logger.info("CU Changes selected. Creating Report...");
-				result = doCUChangesReport(session, fromDate, toDate, props);
+				doCUChangesReport(session, fromDate, toDate, props);
 			} else {
-				return result = "Not a valid report to generate.";
+				response.getWriter().append("Not a valid report to generate.");
 			}
-			
-			return result;
+			response.getWriter().append("Sent.");
 		} catch (APIException e) {
 			try {
 				e.printStackTrace(response.getWriter());
 			} catch (IOException e1) {
-				// TODO Auto-generated catch block
 				e1.printStackTrace();
 			}
-			return "doAction:APIException:" + e.getRootCause();
 		} catch (Exception e) {
-			return "doAction:Exception" + e.getMessage();
+			try {
+				response.getWriter().append(e.getMessage());
+			} catch (IOException e1) {
+				e1.printStackTrace();
+			}
 		}
 	}
 	
-	private String doMBRChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private void doMBRChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
 		
 		OutputStream out = null;
 		try {
@@ -118,10 +121,9 @@ public class GenerateReports {
 			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
 					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "MBRChangesReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
-			return "Email sent.";
 			
 		} catch (Exception e) {
-			return "doMBRChangesReport: " + e.getMessage();
+			e.printStackTrace();
 		} finally {
 			try {
 				if (out != null) {
@@ -134,7 +136,7 @@ public class GenerateReports {
 	}
 	
 	
-	private String doCUBulkReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private void doCUBulkReport(IAgileSession session, String fromDate, String toDate, Properties props) {
 		
 		OutputStream out = null;
 		try {
@@ -165,10 +167,9 @@ public class GenerateReports {
 			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
 					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "CuBulkRelationshipReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
-			return "Email sent.";
 			
 		} catch (Exception e) {
-			return "doCUBulkReport: " + e.getMessage();
+			e.printStackTrace();
 		} finally {
 			try {
 				if (out != null) {
@@ -180,7 +181,7 @@ public class GenerateReports {
 		}
 	}
 	
-	private String doCUChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private void doCUChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
 		
 		OutputStream out = null;
 		try {
@@ -211,10 +212,9 @@ public class GenerateReports {
 			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
 					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "CUChangesReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
-			return "Email sent.";
 			
 		} catch (Exception e) {
-			return "doCUChangesReport: " + e.getMessage();
+			e.printStackTrace();
 		} finally {
 			try {
 				if (out != null) {
@@ -246,11 +246,12 @@ public class GenerateReports {
 			String [] headers = new String[]{
 					"Bulk Oracle Item Number",
 					"Bulk Creation Date",
+					"Bulk Revision",
 					"MBR Item Number",
-					"MBR Creation Date", //3
+					"MBR Creation Date", //4
 					"MBR Revision",
 					"MBR Rev-ECO Number",
-					"MBR ECO Originated Date", // 6
+					"MBR ECO Originated Date", // 7
 					"MBR ECO Date to ERP",
 					"ATO Number for MBR to ERP"
 			};
@@ -301,8 +302,10 @@ public class GenerateReports {
 				 		
 				 		data[0] = item.getName(); 												// Bulk Oracle Item Number
 					 	data[1] = item.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); 	// Bulk Creation Date
+					 	data[2] = item.getRevision();
 					 	logger.info("Bulk Oracle Item Number: " + data[0]); 
 					 	logger.info("Bulk Creation Date: " + data[1]);
+					 	logger.info("Bulk Revision: " + data[2]);
 					 	
 					 	ITable bomTable = item.getTable(ItemConstants.TABLE_BOM);
 					 	logger.info("BOM size: " + bomTable.size());
@@ -321,23 +324,23 @@ public class GenerateReports {
 					 			logger.info("BOM Item: " + itemBOM.getName());
 					 			logger.info("BOM Item Type: " + itemtypeBOM);
 					 			
-					 			data[2] = itemBOM.getName(); // MBR Item Number
-					 			data[3] = itemBOM.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); // MBR Creation Date
-					 			data[4] = (String)rowBOM.getValue(ItemConstants.ATT_BOM_ITEM_REV);	 
+					 			data[3] = itemBOM.getName(); // MBR Item Number
+					 			data[4] = itemBOM.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); // MBR Creation Date
+					 			data[5] = (String)rowBOM.getValue(ItemConstants.ATT_BOM_ITEM_REV);	 
 					 			
-					 			logger.info("MBR Complete Revision: " + data[4]);
+					 			logger.info("MBR Complete Revision: " + data[5]);
 					 			
 					 			// Get revision 
-					 			String [] revChange = data[4].trim().split(" +");
+					 			String [] revChange = data[5].trim().split(" +");
 					 			if (revChange.length > 0) {
-					 				data[4] = revChange[0]; // MBR Revision
+					 				data[5] = revChange[0]; // MBR Revision
 					 				
 					 				// Only care for ECOs
 							 		if (revChange[0].trim().length() <= 0 || revChange[0].trim().length() > 2) {
 							 			//This is not a revision, ignore
 							 		} else {
 							 			// This is a revision
-							 			logger.info("MBR Revision: " + data[4]);
+							 			logger.info("MBR Revision: " + data[5]);
 							 			logger.info("MBR Revision Change: " + revChange[1]);
 						 				
 						 				IChange ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_CHANGE_BASE_CLASS, revChange[1]);
@@ -346,17 +349,17 @@ public class GenerateReports {
 						 					//ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_ECO, revChange[1]);
 						 					logger.info("It is an ECO");
 						 					// Get the ECO related to this revision
-							 				data[5] = ecoMBR.getName(); // MBR Rev-ECO Number
-							 				logger.info("MBR Rev-ECO Number: " + data[5]);
-							 				data[6] = ecoMBR.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_ORIGINATED).toString();
-							 				logger.info("MBR ECO Originated Date: " + data[6]);
+							 				data[6] = ecoMBR.getName(); // MBR Rev-ECO Number
+							 				logger.info("MBR Rev-ECO Number: " + data[6]);
+							 				data[7] = ecoMBR.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_ORIGINATED).toString();
+							 				logger.info("MBR ECO Originated Date: " + data[7]);
 							 				
 							 				// Find the ATO that sent this change to the ERP
 							 				IQuery atoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_ATO);
 							 				atoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
 							 				atoQuery.setRelatedContentClass(ChangeConstants.CLASS_ECO);
 							 				atoQuery.setCaseSensitive(false);
-							 				atoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[5]  + "' ");
+							 				atoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[6]  + "' ");
 							 				
 							 				ITable resATO = atoQuery.execute();
 							 				ITwoWayIterator atoIter = resATO.getTableIterator();
@@ -364,9 +367,9 @@ public class GenerateReports {
 							 				while(atoIter.hasNext()) {
 							 					IRow rowATO = (IRow)atoIter.next();
 							 					ITransferOrder ato = (ITransferOrder) rowATO.getReferent();
-							 					data[7] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
-							 					data[8] = ato.toString(); // ATO Number for MBR to ERP
-							 					logger.info("ATO Number for MBR to ERP: " + data[8]); 
+							 					data[8] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
+							 					data[9] = ato.toString(); // ATO Number for MBR to ERP
+							 					logger.info("ATO Number for MBR to ERP: " + data[9]); 
 							 					
 							 					// Add data to Worksheet
 							 					addRow(data, ws, rowIdx, dateCellStyle, headers);
