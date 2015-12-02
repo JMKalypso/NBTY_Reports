@@ -12,8 +12,6 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.validator.routines.EmailValidator;
 
-import com.nbty.plm.px.reports.GenerateReports;
-
 /**
  * Servlet implementation class URLPXServlet
  */
@@ -50,13 +48,13 @@ public class URLPXServlet extends HttpServlet {
 		/*
 		 * Server not configured to enable the use of cookies
 		 */
-		// Get the cookies
-		//Cookie[] cookies = request.getCookies();
-		//printCookies(cookies,response);
+
 		if (validateEmail(email)) {
-			response.getWriter().append("Sending...");
-			GenerateReports generator = new GenerateReports(); 
-			generator.doAction(reportType, fromDate, toDate, request, response, email);
+			response.getWriter().append("The report has started generating and will be sent in a few minutes. ");
+			
+			Thread thread = new Thread(new ReportThread(reportType,fromDate,toDate,request,response,email));
+			thread.start();
+			
 		} else {
 			request.setAttribute("errorMessage", "Not a valid e-mail address.");
 			request.setAttribute("fromDate", fromDate);
@@ -64,8 +62,6 @@ public class URLPXServlet extends HttpServlet {
 			request.setAttribute("email", email);
 			
 			request.getRequestDispatcher("input.jsp").forward(request, response);
-			//response.sendRedirect("input.jsp");
-			//response.getWriter().append("Not a valid e-mail address.");
 		}
 	}
 	

@@ -49,7 +49,7 @@ public class GenerateReports {
 			String toDate, HttpServletRequest request, HttpServletResponse response, String email) {
 		
 		try {
-			
+			response.getWriter().append("\nGenerating...");
 			// Load properties
 			Properties props = getProps();
 			logger.info("Properties loaded.");	
@@ -72,7 +72,7 @@ public class GenerateReports {
 			} else {
 				response.getWriter().append("Not a valid report to generate.");
 			}
-			response.getWriter().append("Sent.");
+			response.getWriter().append("\nE-mail sent.");
 		} catch (APIException e) {
 			try {
 				e.printStackTrace(response.getWriter());

@@ -77,7 +77,7 @@
 				<tr>
 					<td>Send to e-mail:</td>
 					<td>
-						<input id="email" name="email" type="text" value="${email}"/>
+						<input id="email" name="email" type="text" value="${email}" size="35"/>
 						${errorMessage}
 					</td>
 				</tr>
