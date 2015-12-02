@@ -500,7 +500,7 @@ public class ExtractBulkChanges implements IEventAction {
 		int rowIdx = 0;
 		try {
 			
-			// Headers
+			// Headers 
 			String [] headers = new String[]{
 					"CU Oracle Item Number",
 					"CU Creation Date",
@@ -566,17 +566,19 @@ public class ExtractBulkChanges implements IEventAction {
 			 			if (change.getAgileClass().getName().equals(ExtractConstants.ECO_SUBCLASS)){
 				 			// This is a revision
 				 			// Set to this revision on both items
-				 			item.setRevision(rev);
+			 				if (!item.getRevision().equals(rev)) {
+			 					item.setRevision(rev);
+			 				}
 				 			logger.info("Revision " + rev + " set in CU.");
 				 			
 				 			IItem as400 = (IItem)session.getObject(IItem.OBJECT_TYPE, item.getName() + ".AS400");
-						 	logger.info("AS400 Item: " + as400);
 						 	
 						 	// If there is no AS400 Integration Item, then continue
 						 	if (as400 == null) {
 						 		logger.info("AS400 Integration Item doesn't exist.");
+						 	} else {
+						 		logger.info("AS400 Item: " + as400);
 						 	}
-				 			
 				 			
 				 			try {
 				 				as400.setRevision(rev);
@@ -600,43 +602,7 @@ public class ExtractBulkChanges implements IEventAction {
 						 	IChange revECO = item.getChange();
 						 	data[4] = revECO.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_ORIGINATED).toString(); // CU Rev-ECO Date Originated
 						 	
-						 	data[5] = as400 == null ? "" : as400.getName(); // AS400 Integration Item 
-						 	data[6] = as400 == null ? "" : as400.getRevision(); // AS400 Integration Item Revision
-						 	data[7] = as400 == null ? "" : as400.getChange().getName(); // AS400 Integration Item Revision Change 
-						 	
-						 	logger.info("CU Revision: " + data[2]);
-						 	logger.info("CU Revision Change: " + data[3]);
-						 	logger.info("ECO Rev-Change Date Originated: " + data[4]);
-						 	logger.info("AS400 Integration Item: " + data[5]);
-						 	logger.info("AS400 Integration Item Revision: " + data[6]);
-						 	logger.info("AS400 Item Change: " + data[7]);
-						 	
-						 	if (as400 != null) {
-							 	// Find the CTO that sent this change to the ERP
-				 				IQuery ctoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_CTO);
-				 				ctoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
-				 				ctoQuery.setRelatedContentClass(ChangeConstants.CLASS_CHANGE_BASE_CLASS);
-				 				ctoQuery.setCaseSensitive(false);
-				 				ctoQuery.setCriteria(" [Selected Content.Changes.Cover Page.Number] contains '" + data[7]  + "' ");
-				 				
-				 				ITable resCTO = ctoQuery.execute();
-				 				ITwoWayIterator ctoIter = resCTO.getTableIterator();
-				 				logger.info(resCTO.size() + " Transfer Orders found. ");
-				 				
-				 				while(ctoIter.hasNext()) {
-				 					IRow rowCTO = (IRow)ctoIter.next();
-				 					ITransferOrder cto = (ITransferOrder) rowCTO.getReferent();
-				 					
-				 					data[10] = cto.toString(); // ATO Number for MBR to ERP
-				 					data[11] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE) != null ? 
-				 							cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString() : ""; // CTO Sent to AS400 Date
-				 					logger.info("CTO Number for MBR to ERP: " + data[10]);
-				 					logger.info("CTO Complete: " + data[11]); 
-				 				}
-
-						 	}
-						 	
-			 				// Get BOM to look for Bulk
+						 	// Get BOM to look for Bulk
 			 				ITable bomTable = item.getTable(ItemConstants.TABLE_BOM);
 						 	logger.info("BOM size: " + bomTable.size());
 						 	
@@ -663,9 +629,71 @@ public class ExtractBulkChanges implements IEventAction {
 						 		} 
 							 		
 						 	} // CU BOM
-						 	// Add data to Worksheet
-							addRow(data, ws, rowIdx, dateCellStyle, headers);
-							rowIdx++;
+						 	
+						 	
+						 	data[5] = as400 == null ? "" : as400.getName(); // AS400 Integration Item 
+						 	data[6] = as400 == null ? "" : as400.getRevision(); // AS400 Integration Item Revision
+						 	
+						 	logger.info("CU Revision: " + data[2]);
+						 	logger.info("CU Revision Change: " + data[3]);
+						 	logger.info("ECO Rev-Change Date Originated: " + data[4]);
+						 	logger.info("AS400 Integration Item: " + data[5]);
+						 	logger.info("AS400 Integration Item Revision: " + data[6]);
+						 	
+						 	if (as400 != null) {
+						 		// Get all changes within this revision that were sent to AS400 
+						 		ITable as400Changes = as400.getTable(ItemConstants.TABLE_CHANGEHISTORY);
+						 		ITwoWayIterator chgIt = as400Changes.getTableIterator();
+						 		logger.info("Change History... ");
+						 		
+						 		while (chgIt.hasNext()) {
+						 			IRow rowChange = (IRow)chgIt.next();
+						 			String rowRev = rowChange.getCells()[1].toString();
+						 			logger.info("Row revision: " + rowRev);
+						 			
+						 			if (rowRev.equals(as400.getRevision())) {
+						 				IChange as400Change = (IChange)rowChange.getReferent();
+						 				
+						 				data[7] = as400Change.getName(); // AS400 Integration Item Revision Change 
+						 				logger.info("AS400 Item Change: " + data[7]);
+						 				
+									 	// Find the CTO that sent this change to the ERP
+						 				IQuery ctoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_CTO);
+						 				ctoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
+						 				ctoQuery.setRelatedContentClass(ChangeConstants.CLASS_CHANGE_BASE_CLASS);
+						 				ctoQuery.setCaseSensitive(false);
+						 				ctoQuery.setCriteria(" [Selected Content.Changes.Cover Page.Number] contains '" + data[7]  + "' ");
+						 				
+						 				ITable resCTO = ctoQuery.execute();
+						 				ITwoWayIterator ctoIter = resCTO.getTableIterator();
+						 				logger.info(resCTO.size() + " Transfer Orders found. ");
+						 				
+						 				while(ctoIter.hasNext()) {
+						 					IRow rowCTO = (IRow)ctoIter.next();
+						 					ITransferOrder cto = (ITransferOrder) rowCTO.getReferent();
+						 					
+						 					data[10] = cto.toString(); // CTO Number for CU to ERP
+						 					data[11] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE) != null ? 
+						 							cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString() : ""; // CTO Sent to AS400 Date
+						 					logger.info("CTO Number for MBR to ERP: " + data[10]);
+						 					logger.info("CTO Complete: " + data[11]);
+						 					
+										 	// Add data to Worksheet
+											addRow(data, ws, rowIdx, dateCellStyle, headers);
+											rowIdx++;
+						 				}
+						 				
+						 				if (data[10] == null) {
+						 					logger.info("No CTO found.");
+						 					// Add data to Worksheet
+											addRow(data, ws, rowIdx, dateCellStyle, headers);
+											rowIdx++;
+						 				}
+
+						 			}
+						 		}
+				 				
+						 	}
 			 			}
 
 			 		} // ECO Revision
@@ -674,7 +702,7 @@ public class ExtractBulkChanges implements IEventAction {
 			 }
 
 		} catch (Exception e1) {
-			throw e1;
+			logger.info(e1.getMessage()); 
 		} 
 	}
 	
