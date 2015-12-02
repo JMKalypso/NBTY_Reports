@@ -55,10 +55,10 @@
 					<td>Select what report to generate: </td>
 					<td>
 						<select name="reports" id="reports">
-							<option value="0"></option>
-							<option value="1">MBR Changes</option>
-							<option value="2">CU-Bulk Report</option>
-							<option value="3">CU Changes</option>
+							<option></option>
+							<option>MBR Changes</option>
+							<option>CU-Bulk Report</option>
+							<option>CU Changes</option>
 						</select>
 					</td>
 				</tr>
@@ -92,11 +92,6 @@
 		var picker = new SlimPicker(el);
 	});
 	
-	</script>
-	<script>
-	    var val = ${reports};
-	    var sel = document.getElementById('reports');
-	    sel.selectedIndex = val;
 	</script>
 </body>
 </html>
