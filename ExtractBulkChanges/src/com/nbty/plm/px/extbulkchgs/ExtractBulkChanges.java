@@ -633,14 +633,42 @@ public class ExtractBulkChanges implements IEventAction {
 						 	
 						 	data[5] = as400 == null ? "" : as400.getName(); // AS400 Integration Item 
 						 	data[6] = as400 == null ? "" : as400.getRevision(); // AS400 Integration Item Revision
+						 	data[7] = as400 == null ? "" : as400.getChange().getName(); // AS400 Integration Item Revision Change 
 						 	
 						 	logger.info("CU Revision: " + data[2]);
 						 	logger.info("CU Revision Change: " + data[3]);
 						 	logger.info("ECO Rev-Change Date Originated: " + data[4]);
 						 	logger.info("AS400 Integration Item: " + data[5]);
 						 	logger.info("AS400 Integration Item Revision: " + data[6]);
+						 	logger.info("AS400 Integration Item Rev ECO: " + data[7]);
 						 	
-						 	if (as400 != null) {
+						 	// Look for CTOs that reference the CU/DU change
+						 	IQuery ctoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_CTO);
+			 				ctoQuery.setCaseSensitive(false);
+			 				ctoQuery.setCriteria("[Page Two.Reference Change] in ([Cover Page.Number] == '" + data[3] + "')");
+						 	logger.info("Criteria: " + ctoQuery.getCriteria());
+						 	logger.info("[Page Two.Reference Change] in ([Cover Page.Number] == '" + data[3] + "')");
+			 				ITable resCTO = ctoQuery.execute();
+			 				ITwoWayIterator ctoIter = resCTO.getTableIterator();
+			 				logger.info(resCTO.size() + " Transfer Orders found. ");
+			 				
+			 				while(ctoIter.hasNext()) {
+			 					IRow rowCTO = (IRow)ctoIter.next();
+			 					ITransferOrder cto = (ITransferOrder) rowCTO.getReferent();
+			 					
+			 					data[10] = cto.toString(); // CTO Number for CU to ERP
+			 					data[11] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE) != null ? 
+			 							cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString() : ""; // CTO Sent to AS400 Date
+			 					logger.info("CTO Number for MBR to ERP: " + data[10]);
+			 					logger.info("CTO Complete: " + data[11]);
+			 					
+							 	// Add data to Worksheet
+								addRow(data, ws, rowIdx, dateCellStyle, headers);
+								rowIdx++;
+			 				}
+			 				
+						 	/*if (as400 != null) {
+						 		
 						 		// Get all changes within this revision that were sent to AS400 
 						 		ITable as400Changes = as400.getTable(ItemConstants.TABLE_CHANGEHISTORY);
 						 		ITwoWayIterator chgIt = as400Changes.getTableIterator();
@@ -693,7 +721,7 @@ public class ExtractBulkChanges implements IEventAction {
 						 			}
 						 		}
 				 				
-						 	}
+						 	}*/
 			 			}
 
 			 		} // ECO Revision
