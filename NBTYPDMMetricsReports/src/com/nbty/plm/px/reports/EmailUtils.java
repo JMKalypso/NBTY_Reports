@@ -96,4 +96,55 @@ public class EmailUtils {
 			throw new RuntimeException(e);
 		}
 	}
+	
+	public static void sendEmail(String to, String from, String subject, String messageBody, 
+			final String username, final String password, Properties smtpProps) {
+		
+		// Get the Session object.
+		Session session = null;
+
+		if ((username != null && !username.trim().equals("")) || (password != null && !password.trim().equals(""))) {
+			// username/password is provided
+			logger.info("Username/password is provided.");
+			session = Session.getInstance(smtpProps, new javax.mail.Authenticator() {
+				protected PasswordAuthentication getPasswordAuthentication() {
+					return new PasswordAuthentication(username, password);
+				}
+			});
+		} else {
+			// either username or password is blank
+			logger.info("Either username or password is blank.");
+			session = Session.getInstance(smtpProps, new Authenticator() {
+			});
+		}
+
+		try {
+			// Create a default MimeMessage object.
+			Message message = new MimeMessage(session);
+			logger.info("Message created.");
+			// Set From: header field of the header.
+			message.setFrom(new InternetAddress(from));
+			logger.info("From added: " + from);
+			// Set To: header field of the header.
+			message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
+			logger.info("Recipients added: " + to);
+			// Set Subject: header field
+			message.setSubject(subject);
+			logger.info("Subject added: " + subject);
+			// Create the message part
+			BodyPart messageBodyPart = new MimeBodyPart();
+
+			// Now set the actual message
+			messageBodyPart.setText(messageBody);
+			logger.info("Body added: " + messageBody);
+
+			// Send message
+			Transport.send(message);
+
+		} catch (MessagingException e) {
+			logger.info(e.getMessage());
+			throw new RuntimeException(e);
+		}
+	
+	}
 }

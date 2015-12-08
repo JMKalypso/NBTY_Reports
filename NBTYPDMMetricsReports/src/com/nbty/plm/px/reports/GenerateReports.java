@@ -62,13 +62,13 @@ public class GenerateReports {
 			
 			if (reportType.equals(ExtractConstants.MBR_TYPE)) {
 				logger.info("MBR Changes selected. Creating Report...");
-				doMBRChangesReport(session, fromDate, toDate, props);
+				doMBRChangesReport(session, fromDate, toDate, props, email);
 			} else if (reportType.equals(ExtractConstants.CUBULK_TYPE)) {
 				logger.info("CU-Bulk Report selected. Creating Report...");
-				doCUBulkReport(session, fromDate, toDate, props);
+				doCUBulkReport(session, fromDate, toDate, props, email);
 			} else if (reportType.equals(ExtractConstants.CU_TYPE)) {
 				logger.info("CU Changes selected. Creating Report...");
-				doCUChangesReport(session, fromDate, toDate, props);
+				doCUChangesReport(session, fromDate, toDate, props, email);
 			} else {
 				response.getWriter().append("Not a valid report to generate.");
 			}
@@ -81,14 +81,14 @@ public class GenerateReports {
 			}
 		} catch (Exception e) {
 			try {
-				response.getWriter().append(e.getMessage());
+				e.printStackTrace(response.getWriter());
 			} catch (IOException e1) {
 				e1.printStackTrace();
 			}
 		}
 	}
 	
-	private void doMBRChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private void doMBRChangesReport(IAgileSession session, String fromDate, String toDate, Properties props, String email) {
 		
 		OutputStream out = null;
 		try {
@@ -116,12 +116,13 @@ public class GenerateReports {
 			logger.info("File written.");
 			
 			// Send report via email
-			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
+			EmailUtils.sendEmail(email, props.getProperty("email.from"), "MBR Changes Report",
 					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "MBRChangesReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
 			
 		} catch (Exception e) {
-			e.printStackTrace();
+			EmailUtils.sendEmail(email,props.getProperty("email.from"),"ERROR on PDM Metrics report","Error at generation of MBR report... \n"+
+					"Please, contact PLM admin for more information.\nERROR:\n"+e.getMessage(),"","",props);
 		} finally {
 			try {
 				if (out != null) {
@@ -134,7 +135,7 @@ public class GenerateReports {
 	}
 	
 	
-	private void doCUBulkReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private void doCUBulkReport(IAgileSession session, String fromDate, String toDate, Properties props, String email) {
 		
 		OutputStream out = null;
 		try {
@@ -162,12 +163,13 @@ public class GenerateReports {
 			logger.info("File written.");
 			
 			// Send report via email
-			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
+			EmailUtils.sendEmail(email, props.getProperty("email.from"), "CU-Bulk Relationship Report",
 					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "CuBulkRelationshipReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
 			
 		} catch (Exception e) {
-			e.printStackTrace();
+			EmailUtils.sendEmail(email,props.getProperty("email.from"),"ERROR on PDM Metrics report","Error at generation of CU-Bulk report... \n"+
+					"Please, contact PLM admin for more information.\nERROR:\n"+e.getMessage(),"","",props);
 		} finally {
 			try {
 				if (out != null) {
@@ -179,7 +181,7 @@ public class GenerateReports {
 		}
 	}
 	
-	private void doCUChangesReport(IAgileSession session, String fromDate, String toDate, Properties props) {
+	private void doCUChangesReport(IAgileSession session, String fromDate, String toDate, Properties props, String email) {
 		
 		OutputStream out = null;
 		try {
@@ -207,12 +209,13 @@ public class GenerateReports {
 			logger.info("File written.");
 			
 			// Send report via email
-			EmailUtils.sendEmail(props.getProperty("email.to"), props.getProperty("email.from"), props.getProperty("email.subject"),
+			EmailUtils.sendEmail(email, props.getProperty("email.from"), "CU Changes Report",
 					props.getProperty("email.messageBody"), outputFile.getAbsolutePath(), "CUChangesReport.xlsx",
 					props.getProperty("email.username"), props.getProperty("email.password"), props);
 			
 		} catch (Exception e) {
-			e.printStackTrace();
+			EmailUtils.sendEmail(email,props.getProperty("email.from"),"ERROR on PDM Metrics report","Error at generation of CU report... \n"+
+					"Please, contact PLM admin for more information.\nERROR:\n"+e.getMessage(),"","",props);
 		} finally {
 			try {
 				if (out != null) {
@@ -276,10 +279,11 @@ public class GenerateReports {
 			while(iter.hasNext()) {
 			 	IRow row = (IRow) iter.next();
 			 	
-			 	// Get all revisions
+			 	// Get Bulk item
 			 	IItem item = (IItem)row.getReferent();
 			 	logger.info("Bulk number: " + item.getName());
 			 	
+			 	// Get all revisions
 			 	Map<?,?> revisions = item.getRevisions();
 			 	
 			 	Set<?> set = revisions.entrySet();
@@ -323,67 +327,42 @@ public class GenerateReports {
 					 			logger.info("BOM Item Type: " + itemtypeBOM);
 					 			
 					 			data[3] = itemBOM.getName(); // MBR Item Number
-					 			data[4] = itemBOM.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); // MBR Creation Date
-					 			data[5] = (String)rowBOM.getValue(ItemConstants.ATT_BOM_ITEM_REV);	 
+					 			data[4] = itemBOM.getValue(ItemConstants.ATT_PAGE_TWO_DATE01).toString(); // MBR Creation Date 
+					 			data[5] = itemBOM.getRevision(); // MBR Revision 
 					 			
-					 			logger.info("MBR Complete Revision: " + data[5]);
-					 			
-					 			// Get revision 
-					 			String [] revChange = data[5].trim().split(" +");
-					 			if (revChange.length > 0) {
-					 				data[5] = revChange[0]; // MBR Revision
-					 				
-					 				// Only care for ECOs
-							 		if (revChange[0].trim().length() <= 0 || revChange[0].trim().length() > 2) {
-							 			//This is not a revision, ignore
-							 		} else {
-							 			// This is a revision
-							 			logger.info("MBR Revision: " + data[5]);
-							 			logger.info("MBR Revision Change: " + revChange[1]);
+					 			logger.info("MBR Revision: " + data[5]);
 						 				
-						 				IChange ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_CHANGE_BASE_CLASS, revChange[1]);
-						 				logger.info(ecoMBR.getAgileClass().toString());
-						 				if (ecoMBR.getAgileClass().toString().equals(ExtractConstants.ECO_SUBCLASS)) {
-						 					//ecoMBR = (IChange)session.getObject(ChangeConstants.CLASS_ECO, revChange[1]);
-						 					logger.info("It is an ECO");
-						 					// Get the ECO related to this revision
-							 				data[6] = ecoMBR.getName(); // MBR Rev-ECO Number
-							 				logger.info("MBR Rev-ECO Number: " + data[6]);
-							 				data[7] = ecoMBR.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_ORIGINATED).toString();
-							 				logger.info("MBR ECO Originated Date: " + data[7]);
+				 				IChange ecoMBR = itemBOM.getChange();
+				 				data[6] = ecoMBR.getName(); // MBR Rev-Change Number
+				 				logger.info("MBR Rev-Change Number: " + data[6]);
+				 				data[7] = ecoMBR.getValue(ChangeConstants.ATT_COVER_PAGE_DATE_ORIGINATED).toString();
+				 				logger.info("MBR ECO Originated Date: " + data[7]);
 							 				
-							 				// Find the ATO that sent this change to the ERP
-							 				IQuery atoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_ATO);
-							 				atoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
-							 				atoQuery.setRelatedContentClass(ChangeConstants.CLASS_ECO);
-							 				atoQuery.setCaseSensitive(false);
-							 				atoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[6]  + "' ");
+				 				// Find the ATO that sent this change to the ERP
+				 				IQuery atoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_ATO);
+				 				atoQuery.setSearchType(QueryConstants.TRANSFER_ORDER_SELECTED_CONTENT);
+				 				atoQuery.setRelatedContentClass(ChangeConstants.CLASS_ECO);
+				 				atoQuery.setCaseSensitive(false);
+				 				atoQuery.setCriteria(" [Selected Content.ECO.Cover Page.Number] contains '" + data[6]  + "' ");
+				 				
+				 				ITable resATO = atoQuery.execute();
+				 				ITwoWayIterator atoIter = resATO.getTableIterator();
 							 				
-							 				ITable resATO = atoQuery.execute();
-							 				ITwoWayIterator atoIter = resATO.getTableIterator();
-							 				
-							 				while(atoIter.hasNext()) {
-							 					IRow rowATO = (IRow)atoIter.next();
-							 					ITransferOrder ato = (ITransferOrder) rowATO.getReferent();
-							 					data[8] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
-							 					data[9] = ato.toString(); // ATO Number for MBR to ERP
-							 					logger.info("ATO Number for MBR to ERP: " + data[9]); 
-							 					
-							 					// Add data to Worksheet
-							 					addRow(data, ws, rowIdx, dateCellStyle, headers);
-							 					rowIdx++;
-							 					data = new String[headers.length];
-							 					
-							 					
-							 					break;
-							 				}
-						 				} 
-							 		}
-					 				
-					 			} // rev CLOSE
+				 				while(atoIter.hasNext()) {
+				 					IRow rowATO = (IRow)atoIter.next();
+				 					ITransferOrder ato = (ITransferOrder) rowATO.getReferent();
+				 					data[8] = ato.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString();
+				 					data[9] = ato.toString(); // ATO Number for MBR to ERP
+				 					logger.info("ATO Number for MBR to ERP: " + data[9]); 
+				 					
+				 					// Add data to Worksheet
+				 					addRow(data, ws, rowIdx, dateCellStyle, headers);
+				 					rowIdx++;
+				 				}
 					 			
 					 		} // THIS IS A MBR
 					 	} // BULK BOM
+					 	data = new String[headers.length];
 			 		} // ECO Revision
 			 	} // EACH REVISION
 			 	
@@ -637,14 +616,42 @@ public class GenerateReports {
 						 	
 						 	data[5] = as400 == null ? "" : as400.getName(); // AS400 Integration Item 
 						 	data[6] = as400 == null ? "" : as400.getRevision(); // AS400 Integration Item Revision
+						 	data[7] = as400 == null ? "" : as400.getChange().getName(); // AS400 Integration Item Revision Change 
 						 	
 						 	logger.info("CU Revision: " + data[2]);
 						 	logger.info("CU Revision Change: " + data[3]);
 						 	logger.info("ECO Rev-Change Date Originated: " + data[4]);
 						 	logger.info("AS400 Integration Item: " + data[5]);
 						 	logger.info("AS400 Integration Item Revision: " + data[6]);
+						 	logger.info("AS400 Integration Item Rev ECO: " + data[7]);
 						 	
-						 	if (as400 != null) {
+						 	// Look for CTOs that reference the CU/DU change
+						 	IQuery ctoQuery = (IQuery) session.createObject(IQuery.OBJECT_TYPE, TransferOrderConstants.CLASS_CTO);
+			 				ctoQuery.setCaseSensitive(false);
+			 				ctoQuery.setCriteria("[Page Two.Reference Change] in ([Cover Page.Number] == '" + data[3] + "')");
+						 	logger.info("Criteria: " + ctoQuery.getCriteria());
+						 	logger.info("[Page Two.Reference Change] in ([Cover Page.Number] == '" + data[3] + "')");
+			 				ITable resCTO = ctoQuery.execute();
+			 				ITwoWayIterator ctoIter = resCTO.getTableIterator();
+			 				logger.info(resCTO.size() + " Transfer Orders found. ");
+			 				
+			 				while(ctoIter.hasNext()) {
+			 					IRow rowCTO = (IRow)ctoIter.next();
+			 					ITransferOrder cto = (ITransferOrder) rowCTO.getReferent();
+			 					
+			 					data[10] = cto.toString(); // CTO Number for CU to ERP
+			 					data[11] = cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE) != null ? 
+			 							cto.getValue(TransferOrderConstants.ATT_COVER_PAGE_FINAL_COMPLETE_DATE).toString() : ""; // CTO Sent to AS400 Date
+			 					logger.info("CTO Number for MBR to ERP: " + data[10]);
+			 					logger.info("CTO Complete: " + data[11]);
+			 					
+							 	// Add data to Worksheet
+								addRow(data, ws, rowIdx, dateCellStyle, headers);
+								rowIdx++;
+			 				}
+			 				
+						 	/*if (as400 != null) {
+						 		
 						 		// Get all changes within this revision that were sent to AS400 
 						 		ITable as400Changes = as400.getTable(ItemConstants.TABLE_CHANGEHISTORY);
 						 		ITwoWayIterator chgIt = as400Changes.getTableIterator();
@@ -697,7 +704,7 @@ public class GenerateReports {
 						 			}
 						 		}
 				 				
-						 	}
+						 	}*/
 			 			}
 
 			 		} // ECO Revision
