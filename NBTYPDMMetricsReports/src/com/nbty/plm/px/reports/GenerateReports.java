@@ -43,7 +43,7 @@ import com.agile.api.TransferOrderConstants;
 
 public class GenerateReports {
 	
-	private static final Logger logger = Logger.getLogger("ExtractBulkChangesPXLog");
+	private static final Logger logger = Logger.getLogger("GenerateReportsPXLog");
 	
 	public void doAction(String reportType, String fromDate,
 			String toDate, HttpServletRequest request, HttpServletResponse response, String email) {

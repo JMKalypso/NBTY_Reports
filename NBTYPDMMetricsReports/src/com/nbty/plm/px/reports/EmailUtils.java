@@ -22,7 +22,7 @@ import org.apache.log4j.Logger;
 
 public class EmailUtils {
 	
-	private static final Logger logger = Logger.getLogger("ExtractBulkChangesPXLog");
+	private static final Logger logger = Logger.getLogger("GenerateReportsPXLog");
 	
 	public static void sendEmail(String to, String from, String subject, String messageBody, String attachmentPath, String attachmentFilename,
 			final String username, final String password, Properties smtpProps) {
